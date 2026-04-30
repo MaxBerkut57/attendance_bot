@@ -1,28 +1,21 @@
 import asyncio
 from aiogram import Bot, Dispatcher
-from aiogram.client.session.aiohttp import AiohttpSession
-from bot.config import settings
 from bot.config import settings
 from bot.logger import logger
-from bot.db.database import create_tables
-from bot.db.database import engine
+from bot.db.database import create_tables, engine
 
 async def main():
-    # Создание таблиц
+    # Создание таблиц в БД
     await create_tables()
 
+    # Создаём бота с поддержкой SOCKS5-прокси
     if settings.PROXY_URL:
-        from aiohttp_socks import ProxyConnector
-        from aiogram.client.session.aiohttp import AiohttpSession
-        connector = ProxyConnector.from_url(settings.PROXY_URL)
-        session = AiohttpSession(connector=connector)
-        bot = Bot(token=settings.BOT_TOKEN, session=session)
-        logger.info("Using SOCKS5 proxy for Telegram")
+        bot = Bot(token=settings.BOT_TOKEN, proxy=settings.PROXY_URL)
+        logger.info("Using proxy for Telegram API")
     else:
         bot = Bot(token=settings.BOT_TOKEN)
 
     dp = Dispatcher()
-
     # Здесь будут регистрироваться роутеры
 
     logger.info("Starting bot...")
@@ -31,8 +24,6 @@ async def main():
     finally:
         await bot.session.close()
         await engine.dispose()
-
-    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
