@@ -1,0 +1,23 @@
+# Виртуальное окружение
+venv/
+env/
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+
+# Логи
+logs/
+*.log
+
+# Системные файлы
+.DS_Store
+Thumbs.db
