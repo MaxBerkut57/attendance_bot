@@ -5,6 +5,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str  # asyncpg, например postgresql+asyncpg://user:pass@localhost/attendance
     REDIS_URL: str     # например redis://localhost:6379/0
 
+    # SOCKS5-прокси для Telegram (Tor обычно слушает 127.0.0.1:9050)
+    PROXY_URL: str | None = None  # например "socks5://127.0.0.1:9050"
+
     # ID администратора (твой)
     ADMIN_USER_ID: int
     ADMIN_USERNAME: str = "pretti_lim"
