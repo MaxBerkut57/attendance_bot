@@ -101,6 +101,17 @@ async def cmd_start(message: types.Message):
                 return
 
         # 3. Создаём нового пользователя (без группы)
+        if username:
+            existing = await session.execute(
+                select(User).where(User.username == username)
+            )
+            if existing.scalars().first():
+                await message.answer(
+                    "Этот username уже привязан к другому аккаунту Telegram.\n"
+                    "Если это ваш аккаунт, обратитесь к администратору для переноса."
+                )
+                return
+
         user = User(
             user_id=user_id,
             username=username,
