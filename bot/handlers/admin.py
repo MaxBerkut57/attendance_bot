@@ -99,7 +99,7 @@ async def start_set_curator(callback: types.CallbackQuery, state: FSMContext):
             return
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
             [types.InlineKeyboardButton(text=g.name, callback_data=f"curgroup_{g.id}")] for g in groups
-        ])
+        ] + [[types.InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_action")]])
     await callback.message.answer("Выберите группу:", reply_markup=keyboard)
     await callback.answer()
 
