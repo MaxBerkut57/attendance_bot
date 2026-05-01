@@ -63,6 +63,7 @@ async def admin_menu(callback: types.CallbackQuery):
         [types.InlineKeyboardButton(text="🔙 Назад", callback_data="menu_back")],
         [types.InlineKeyboardButton(text="📋 Загрузить список студентов", callback_data="admin_upload_list")],
         [types.InlineKeyboardButton(text="🔓 Отвязать username", callback_data="admin_unlink_username")],
+        [types.InlineKeyboardButton(text="👥 Список пользователей", callback_data="admin_list_users")],
     ])
     await callback.message.edit_text("⚙️ Панель администратора", reply_markup=keyboard)
     await callback.answer()
@@ -251,4 +252,26 @@ async def cancel_action(callback: types.CallbackQuery, state: FSMContext):
                 "Главное меню",
                 reply_markup=await get_main_menu(user, session)
             )
+    await callback.answer()
+
+@router.callback_query(F.data == "admin_list_users")
+async def list_users(callback: types.CallbackQuery):
+    async with async_session() as session:
+        users = (await session.execute(select(User).order_by(User.full_name))).scalars().all()
+        if users:
+            lines = []
+            for u in users:
+                tg_id = str(u.user_id) if u.user_id else "не привязан"
+                roles = []
+                if u.is_admin:
+                    roles.append("админ")
+                if u.is_curator:
+                    roles.append("куратор")
+                # Можно добавить проверку на старосту, но для краткости опустим
+                role_str = ", ".join(roles) if roles else "студент"
+                lines.append(f"• {u.full_name} (@{u.username or 'нет'}) ID: {tg_id} [{role_str}]")
+            text = "Список пользователей:\n" + "\n".join(lines)
+        else:
+            text = "Пользователи отсутствуют."
+    await callback.message.answer(text)
     await callback.answer()
