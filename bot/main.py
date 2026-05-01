@@ -18,6 +18,7 @@ class ProxiedAiohttpSession(AiohttpSession):
 
 async def main():
     await create_tables()
+    await seed_admin()
 
     if settings.PROXY_URL:
         session = ProxiedAiohttpSession(proxy_url=settings.PROXY_URL)
