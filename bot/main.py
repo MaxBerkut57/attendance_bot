@@ -12,7 +12,7 @@ from bot.handlers.admin import router as admin_router
 from aiogram.fsm.storage.memory import MemoryStorage
 from bot.handlers.group_management import router as group_mgmt_router
 from bot.handlers.reply_menu import router as reply_menu_router
-
+from bot.handlers.schedule_upload import router as schedule_upload_router
 
 class ProxiedAiohttpSession(AiohttpSession):
     def __init__(self, proxy_url: str, **kwargs):
@@ -35,6 +35,7 @@ async def main():
         bot = Bot(token=settings.BOT_TOKEN)
 
     dp = Dispatcher(storage=MemoryStorage())
+    dp.include_router(schedule_upload_router)
     dp.include_router(start_router)
     dp.include_router(menu_router)
     dp.include_router(admin_router)

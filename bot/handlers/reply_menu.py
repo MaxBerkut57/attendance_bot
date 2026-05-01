@@ -5,6 +5,8 @@ from bot.db.database import async_session
 from bot.db.models import User, Group, GroupMembership
 from bot.keyboards.main_menu import get_reply_keyboard
 from bot.logger import logger
+from aiogram.fsm.context import FSMContext
+from bot.handlers.schedule_upload import ScheduleUpload, cancel_kb
 
 router = Router()
 
@@ -61,14 +63,18 @@ async def my_group_reply(message: types.Message, state: FSMContext):
     await message.answer("У вас нет прав для управления группой.")
 
 @router.message(F.text == "📅 Загрузить расписание")
-async def upload_schedule_reply(message: types.Message):
+async def upload_schedule_reply(message: types.Message, state: FSMContext):
     async with async_session() as session:
-        # Староста
         group = await get_starosta_group(session, message.from_user.id)
         if group:
-            # Перенаправляем в обработчик schedule_upload (вызов state)
-            # Пока заглушка, позже заменим реальной логикой
-            await message.answer(f"Загрузка расписания для группы «{group.name}» (в разработке).")
+            # Староста – сразу переходим к загрузке для своей группы
+            await state.update_data(group_id=group.id, group_name=group.name)
+            await message.answer(
+                f"Отправьте Excel-файл с расписанием для группы {group.name}.\n"
+                "Ожидаемые столбцы: День недели, Дата, Время с, Время по, Дисциплина, Преподаватель, Аудитория, Группа",
+                reply_markup=cancel_kb  # cancel_kb надо импортировать или создать
+            )
+            await state.set_state(ScheduleUpload.waiting_for_file)
             return
 
         # Админ
