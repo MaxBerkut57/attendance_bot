@@ -7,8 +7,13 @@ from bot.db.database import async_session
 from bot.db.models import User, Group, GroupCurator, GroupMembership
 from bot.keyboards.main_menu import get_main_menu
 from bot.logger import logger
+from aiogram.fsm.context import FSMContext
 
 router = Router()
+
+cancel_kb = types.InlineKeyboardMarkup(
+    inline_keyboard=[[types.InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_action")]]
+)
 
 class AdminActions(StatesGroup):
     waiting_username_starosta = State()
@@ -47,7 +52,7 @@ async def start_set_starosta(callback: types.CallbackQuery, state: FSMContext):
             return
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
             [types.InlineKeyboardButton(text=g.name, callback_data=f"stargroup_{g.id}")] for g in groups
-        ])
+        ] + [[types.InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_action")]])
     await callback.message.answer("Выберите группу для назначения старосты:", reply_markup=keyboard)
     await callback.answer()
 
@@ -55,7 +60,7 @@ async def start_set_starosta(callback: types.CallbackQuery, state: FSMContext):
 async def choose_group_for_starosta(callback: types.CallbackQuery, state: FSMContext):
     group_id = int(callback.data.split("_")[1])
     await state.update_data(group_id=group_id)
-    await callback.message.answer("Введите username нового старосты (без @):")
+    await callback.message.answer("Введите username нового старосты (без @):", reply_markup=cancel_kb)
     await state.set_state(AdminActions.waiting_username_starosta)
     await callback.answer()
 
@@ -102,7 +107,7 @@ async def start_set_curator(callback: types.CallbackQuery, state: FSMContext):
 async def choose_group_for_curator(callback: types.CallbackQuery, state: FSMContext):
     group_id = int(callback.data.split("_")[1])
     await state.update_data(group_id=group_id)
-    await callback.message.answer("Введите username куратора (без @):")
+    await callback.message.answer("Введите username куратора (без @):", reply_markup=cancel_kb)
     await state.set_state(AdminActions.waiting_username_curator)
     await callback.answer()
 
@@ -134,7 +139,7 @@ async def process_curator_username(message: types.Message, state: FSMContext):
 # ==================== ИЗМЕНЕНИЕ ФИО ====================
 @router.callback_query(F.data == "admin_edit_fullname")
 async def start_edit_fullname(callback: types.CallbackQuery, state: FSMContext):
-    await callback.message.answer("Введите username пользователя (без @):")
+    await callback.message.answer("Введите username пользователя (без @):", reply_markup=cancel_kb)
     await state.set_state(AdminActions.waiting_username_editfn)
     await callback.answer()
 
@@ -187,4 +192,20 @@ async def back_to_main(callback: types.CallbackQuery):
         user = await session.get(User, callback.from_user.id)
         if user:
             await callback.message.edit_text("Главное меню", reply_markup=await get_main_menu(user, session))
+    await callback.answer()
+
+@router.callback_query(F.data == "cancel_action")
+async def cancel_action(callback: types.CallbackQuery, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state is not None:
+        await state.clear()
+    await callback.message.edit_text("❌ Действие отменено.")
+    # Вернём главное меню
+    async with async_session() as session:
+        user = await session.get(User, callback.from_user.id)
+        if user:
+            await callback.message.answer(
+                "Главное меню",
+                reply_markup=await get_main_menu(user, session)
+            )
     await callback.answer()
