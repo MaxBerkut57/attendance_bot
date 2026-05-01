@@ -157,6 +157,7 @@ async def process_student_list_file(message: types.Message, state: FSMContext):
                 session.add(GroupMembership(user_id=None, group_id=group_id))
                 session.add(PendingInvite(token=token, user_id=user.user_id))
                 pending_links.append((full_name, token))
+                logger.info(f"Creating invite for {full_name}")
                 continue
 
             # 3. Обычная обработка (username указан)
