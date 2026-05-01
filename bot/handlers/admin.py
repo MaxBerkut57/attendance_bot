@@ -5,7 +5,7 @@ from aiogram.filters import StateFilter
 from sqlalchemy import select
 from bot.db.database import async_session
 from bot.db.models import User, Group, GroupCurator, GroupMembership
-from bot.keyboards.main_menu import get_main_menu
+from bot.keyboards.main_menu import get_main_menu, get_reply_keyboard
 from bot.logger import logger
 
 router = Router()
@@ -234,7 +234,11 @@ async def back_to_main(callback: types.CallbackQuery):
         result = await session.execute(select(User).where(User.user_id == callback.from_user.id))
         user = result.scalars().first()
         if user:
-            await callback.message.edit_text("Главное меню", reply_markup=await get_main_menu(user, session))
+            await callback.message.delete()  # убираем сообщение с inline-кнопками
+            await callback.message.answer(
+                "Главное меню",
+                reply_markup=await get_reply_keyboard(user, session)
+            )
     await callback.answer()
 
 @router.callback_query(F.data == "cancel_action")
@@ -243,14 +247,13 @@ async def cancel_action(callback: types.CallbackQuery, state: FSMContext):
     if current_state is not None:
         await state.clear()
     await callback.message.edit_text("❌ Действие отменено.")
-    # Вернём главное меню
     async with async_session() as session:
         result = await session.execute(select(User).where(User.user_id == callback.from_user.id))
         user = result.scalars().first()
         if user:
             await callback.message.answer(
                 "Главное меню",
-                reply_markup=await get_main_menu(user, session)
+                reply_markup=await get_reply_keyboard(user, session)
             )
     await callback.answer()
 
