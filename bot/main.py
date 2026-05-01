@@ -27,6 +27,9 @@ async def main():
         bot = Bot(token=settings.BOT_TOKEN)
 
     dp = Dispatcher()
+    print("=== Bot started (print) ===")
+    logger.info("Bot started")
+
     logger.info("Bot started")
     try:
         await dp.start_polling(bot)
