@@ -41,9 +41,7 @@ async def cmd_start(message: types.Message):
             memberships = await session.execute(
                 select(GroupMembership).where(
                     GroupMembership.user_id.is_(None),
-                    GroupMembership.group_id.in_(
-                        select(Group.id).join(GroupMembership).where(GroupMembership.user_id.is_(None))
-                    )
+                    GroupMembership.user.has(User.username == f"invite_{token}")
                 )
             )
             for ms in memberships.scalars():
