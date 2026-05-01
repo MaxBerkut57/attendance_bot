@@ -165,5 +165,6 @@ async def admin_reply(message: types.Message):
         [types.InlineKeyboardButton(text="📋 Загрузить список студентов", callback_data="admin_upload_list")],
         [types.InlineKeyboardButton(text="🔓 Отвязать username", callback_data="admin_unlink_username")],
         [types.InlineKeyboardButton(text="👥 Список пользователей", callback_data="admin_list_users")],
+        [types.InlineKeyboardButton(text="📅 Сегодняшнее расписание", callback_data="admin_schedule_today")],
     ])
     await message.answer("⚙️ Панель администратора", reply_markup=keyboard)

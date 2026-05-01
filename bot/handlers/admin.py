@@ -278,3 +278,19 @@ async def list_users(callback: types.CallbackQuery):
             text = "Пользователи отсутствуют."
     await callback.message.answer(text)
     await callback.answer()
+
+
+@router.callback_query(F.data == "admin_schedule_today")
+async def schedule_today(callback: types.CallbackQuery):
+    today = datetime.now().date()
+    async with async_session() as session:
+        schedules = (await session.execute(
+            select(Schedule).where(Schedule.date == today)
+        )).scalars().all()
+        if not schedules:
+            await callback.message.answer("На сегодня занятий нет.")
+            await callback.answer()
+            return
+        lines = [f"{s.time_start.strftime('%H:%M')} – {s.time_end.strftime('%H:%M')} {s.discipline} ({s.audience})" for s in schedules]
+        await callback.message.answer("Занятия на сегодня:\n" + "\n".join(lines))
+    await callback.answer()
