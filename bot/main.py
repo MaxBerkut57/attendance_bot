@@ -5,7 +5,8 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 from bot.config import settings
 from bot.logger import logger
-from bot.db.database import create_tables, engine
+from bot.db.database import create_tables, engine, seed_admin
+
 
 class ProxiedAiohttpSession(AiohttpSession):
     def __init__(self, proxy_url: str, **kwargs):
