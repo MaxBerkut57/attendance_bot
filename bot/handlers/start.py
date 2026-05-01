@@ -39,6 +39,15 @@ async def cmd_start(message: types.Message):
                 # Привязываем Telegram ID
                 user.user_id = user_id
                 user.full_name = full_name
+                # Дополнительно: привязываем к группам, куда он был добавлен заочно
+                memberships = await session.execute(
+                    select(GroupMembership).where(
+                        GroupMembership.user_id.is_(None),
+                        GroupMembership.user.has(User.username == username)
+                    )
+                )
+                for ms in memberships.scalars():
+                    ms.user_id = user_id
                 await session.commit()
                 await message.answer(
                     f"Вы успешно привязаны как {user.full_name}!\n"

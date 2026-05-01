@@ -10,6 +10,7 @@ from bot.handlers.start import router as start_router
 from bot.handlers.menu import router as menu_router
 from bot.handlers.admin import router as admin_router
 from aiogram.fsm.storage.memory import MemoryStorage
+from bot.handlers.group_management import router as group_mgmt_router
 
 
 class ProxiedAiohttpSession(AiohttpSession):
@@ -36,6 +37,7 @@ async def main():
     dp.include_router(start_router)
     dp.include_router(menu_router)
     dp.include_router(admin_router)
+    dp.include_router(group_mgmt_router)
 
     print("=== Bot started (print) ===")
     logger.info("Bot started")

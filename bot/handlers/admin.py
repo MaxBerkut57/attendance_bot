@@ -36,7 +36,8 @@ async def admin_menu(callback: types.CallbackQuery):
         [types.InlineKeyboardButton(text="📌 Назначить куратора", callback_data="admin_set_curator")],
         [types.InlineKeyboardButton(text="👤 Изменить ФИО", callback_data="admin_edit_fullname")],
         [types.InlineKeyboardButton(text="📂 Все группы", callback_data="admin_list_groups")],
-        [types.InlineKeyboardButton(text="🔙 Назад", callback_data="menu_back")]
+        [types.InlineKeyboardButton(text="🔙 Назад", callback_data="menu_back")],
+        [types.InlineKeyboardButton(text="📋 Загрузить список студентов", callback_data="admin_upload_list")],
     ])
     await callback.message.edit_text("⚙️ Панель администратора", reply_markup=keyboard)
     await callback.answer()
