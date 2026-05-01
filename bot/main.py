@@ -3,7 +3,6 @@ import aiohttp
 from aiohttp_socks import ProxyConnector
 
 from aiogram import Bot, Dispatcher
-from aiogram.client.session.aiohttp import AiohttpSession
 
 from bot.config import settings
 from bot.logger import logger
@@ -14,9 +13,8 @@ async def main():
 
     if settings.PROXY_URL:
         connector = ProxyConnector.from_url(settings.PROXY_URL)
-        client_session = aiohttp.ClientSession(connector=connector)
-        tg_session = AiohttpSession(session=client_session)
-        bot = Bot(token=settings.BOT_TOKEN, session=tg_session)
+        session = aiohttp.ClientSession(connector=connector)
+        bot = Bot(token=settings.BOT_TOKEN, session=session)
         logger.info("Using SOCKS5 proxy for Telegram API")
     else:
         bot = Bot(token=settings.BOT_TOKEN)
