@@ -32,11 +32,10 @@ async def main():
     else:
         bot = Bot(token=settings.BOT_TOKEN)
 
-    dp = Dispatcher()
+    dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(start_router)
     dp.include_router(menu_router)
     dp.include_router(admin_router)
-    dp = Dispatcher(storage=MemoryStorage())
 
     print("=== Bot started (print) ===")
     logger.info("Bot started")
