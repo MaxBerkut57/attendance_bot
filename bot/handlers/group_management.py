@@ -136,10 +136,14 @@ async def process_student_list_file(message: types.Message, state: FSMContext):
                 continue
             full_name = str(row[name_col]).strip() if row[name_col] else ""
             username = str(row[username_col]).strip().lstrip("@") if row[username_col] else ""
-            if not full_name or not username:
+
+            # 1. Пропускаем строки без ФИО
+            if not full_name:
                 errors += 1
                 continue
-            if not username:  # <-- НОВОЕ
+
+            # 2. Обработка ПУСТОГО username (создаём инвайт)
+            if not username:
                 token = secrets.token_urlsafe(32)
                 artificial_username = f"invite_{token}"
                 user = User(
@@ -155,13 +159,13 @@ async def process_student_list_file(message: types.Message, state: FSMContext):
                 pending_links.append((full_name, token))
                 continue
 
-                # Найти или создать пользователя
+            # 3. Обычная обработка (username указан)
             stmt = select(User).where(User.username == username)
             result = await session.execute(stmt)
             user = result.scalars().first()
             if not user:
                 user = User(
-                    user_id=None,      # привяжется при /start
+                    user_id=None,
                     username=username,
                     full_name=full_name,
                     is_admin=False
@@ -183,16 +187,25 @@ async def process_student_list_file(message: types.Message, state: FSMContext):
             )
             if not existing_membership.scalars().first():
                 session.add(GroupMembership(
-                    user_id=user.user_id,  # может быть NULL
+                    user_id=user.user_id,
                     group_id=group_id
                 ))
 
         await session.commit()
 
-    await message.answer(
+    result_text = (
         f"Загрузка завершена.\n"
         f"Добавлено новых пользователей: {added}\n"
         f"Обновлено ФИО: {updated}\n"
         f"Строк с ошибками: {errors}"
     )
+    if pending_links:
+        bot_username = (await message.bot.get_me()).username
+        links_text = "\n".join(
+            f"{name}: https://t.me/{bot_username}?start=invite_{token}"
+            for name, token in pending_links
+        )
+        result_text += f"\n\nСсылки для студентов без username:\n{links_text}"
+
+    await message.answer(result_text)
     await state.clear()
