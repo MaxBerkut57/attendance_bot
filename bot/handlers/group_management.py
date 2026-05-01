@@ -91,8 +91,9 @@ async def admin_upload_list_for_group(callback: types.CallbackQuery, state: FSMC
 @router.message(StateFilter(GroupManagement.waiting_for_file), F.document)
 async def process_student_list_file(message: types.Message, state: FSMContext):
     document = message.document
-    if not document.file_name.endswith(".xlsx"):
-        await message.answer("Пожалуйста, отправьте файл в формате Excel (.xlsx).")
+    file_name = document.file_name.lower()
+    if not (file_name.endswith(".xlsx") or file_name.endswith(".xls")):
+        await message.answer("Пожалуйста, отправьте файл в формате Excel (.xlsx или .xls).")
         return
 
     data = await state.get_data()
@@ -103,46 +104,68 @@ async def process_student_list_file(message: types.Message, state: FSMContext):
     buf.seek(0)
 
     try:
-        wb = openpyxl.load_workbook(buf, read_only=True)
-        ws = wb.active
+        if file_name.endswith(".xls"):
+            import xlrd
+            wb = xlrd.open_workbook(file_contents=buf.read())
+            ws = wb.sheet_by_index(0)
+            # читаем заголовки
+            headers = [ws.cell_value(0, col) for col in range(ws.ncols)]
+            # определяем колонки
+            name_col = username_col = None
+            for i, h in enumerate(headers):
+                if h and "фио" in str(h).lower():
+                    name_col = i
+                if h and "username" in str(h).lower():
+                    username_col = i
+            if name_col is None or username_col is None:
+                await message.answer("Не найдены колонки «ФИО» и «username».")
+                await state.clear()
+                return
+            # обработка строк
+            rows = []
+            for row_idx in range(1, ws.nrows):
+                full_name = str(ws.cell_value(row_idx, name_col)).strip() if name_col < ws.ncols else ""
+                username = str(ws.cell_value(row_idx, username_col)).strip().lstrip("@") if username_col < ws.ncols else ""
+                rows.append((full_name, username))
+        else:  # .xlsx
+            wb = openpyxl.load_workbook(buf, read_only=True)
+            ws = wb.active
+            headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+            name_col = username_col = None
+            for i, h in enumerate(headers):
+                if h and "фио" in str(h).lower():
+                    name_col = i
+                if h and "username" in str(h).lower():
+                    username_col = i
+            if name_col is None or username_col is None:
+                await message.answer("Не найдены колонки «ФИО» и «username».")
+                await state.clear()
+                return
+            rows = []
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                if not row or len(row) <= max(name_col, username_col):
+                    continue
+                full_name = str(row[name_col]).strip() if row[name_col] else ""
+                username = str(row[username_col]).strip().lstrip("@") if row[username_col] else ""
+                rows.append((full_name, username))
     except Exception as e:
         logger.error(f"Excel read error: {e}")
         await message.answer("Ошибка чтения файла. Проверьте формат.")
         await state.clear()
         return
 
-    # Поиск колонок
-    headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
-    name_col = username_col = None
-    for i, h in enumerate(headers):
-        if h and "фио" in str(h).lower():
-            name_col = i
-        if h and "username" in str(h).lower():
-            username_col = i
-
-    if name_col is None or username_col is None:
-        await message.answer("Не найдены колонки «ФИО» и «username».")
-        await state.clear()
-        return
-
+    # Далее идёт прежняя логика обработки rows (цикл по rows)
     added = 0
     updated = 0
     errors = 0
     pending_links = []
 
     async with async_session() as session:
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            if not row or len(row) <= max(name_col, username_col):
-                continue
-            full_name = str(row[name_col]).strip() if row[name_col] else ""
-            username = str(row[username_col]).strip().lstrip("@") if row[username_col] else ""
-
-            # 1. Пропускаем строки без ФИО
+        for full_name, username in rows:
             if not full_name:
                 errors += 1
                 continue
 
-            # 2. Обработка ПУСТОГО username (создаём инвайт)
             if not username:
                 token = secrets.token_urlsafe(32)
                 artificial_username = f"invite_{token}"
@@ -160,7 +183,7 @@ async def process_student_list_file(message: types.Message, state: FSMContext):
                 logger.info(f"Creating invite for {full_name}")
                 continue
 
-            # 3. Обычная обработка (username указан)
+            # Обычная обработка (username указан)
             stmt = select(User).where(User.username == username)
             result = await session.execute(stmt)
             user = result.scalars().first()
