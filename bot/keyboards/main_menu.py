@@ -1,28 +1,31 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from bot.db.models import User
+from sqlalchemy import select
+from bot.db.models import User, Group, GroupCurator
 
-def get_main_menu(user: User) -> InlineKeyboardMarkup:
-    """Генерация главного меню в зависимости от роли."""
+async def get_main_menu(user: User, session) -> InlineKeyboardMarkup:
     buttons = []
 
-    # Общие для всех
+    # Кнопки для всех
     buttons.append([InlineKeyboardButton(text="📋 Мои опросы", callback_data="menu_my_polls")])
     buttons.append([InlineKeyboardButton(text="📊 История", callback_data="menu_history")])
 
-    # Староста
-    # Проверим, является ли пользователь старостой хоть одной группы
-    if user.user_id:
-        from bot.db.models import Group
-        # Потребуется запрос к БД, поэтому можно принимать флаг в функции,
-        # но для простоты будем передавать дополнительные данные.
-        # На данном этапе сделаем заглушку: добавим кнопку "Моя группа", если есть хоть одна группа, где пользователь староста.
-        # Передадим это через дополнительный параметр позже.
-        pass  # Временно не проверяем, но можно оставить заглушки.
+    # Проверяем, является ли пользователь старостой
+    stmt_starosta = select(Group).where(Group.starosta_id == user.user_id)
+    result_starosta = await session.execute(stmt_starosta)
+    starosta_groups = result_starosta.scalars().all()
+    if starosta_groups:
+        buttons.append([InlineKeyboardButton(text="👥 Моя группа", callback_data="menu_starosta_group")])
+        buttons.append([InlineKeyboardButton(text="📅 Загрузить расписание", callback_data="menu_upload_schedule")])
+        buttons.append([InlineKeyboardButton(text="📈 Отчёт", callback_data="menu_report")])
 
-    # Куратор
+    # Проверяем, является ли пользователь куратором (хотя бы одна группа)
+    stmt_curator = select(GroupCurator).where(GroupCurator.user_id == user.user_id)
+    result_curator = await session.execute(stmt_curator)
+    if result_curator.scalars().first():
+        buttons.append([InlineKeyboardButton(text="📊 Процент посещаемости (куратор)", callback_data="menu_curator_attendance")])
+
     # Админ
     if user.is_admin:
         buttons.append([InlineKeyboardButton(text="⚙️ Администрирование", callback_data="menu_admin")])
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-    return keyboard
+    return InlineKeyboardMarkup(inline_keyboard=buttons)

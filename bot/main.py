@@ -8,6 +8,8 @@ from bot.logger import logger
 from bot.db.database import create_tables, engine, seed_admin
 from bot.handlers.start import router as start_router
 from bot.handlers.menu import router as menu_router
+from bot.handlers.admin import router as admin_router
+from aiogram.fsm.storage.memory import MemoryStorage
 
 
 class ProxiedAiohttpSession(AiohttpSession):
@@ -33,6 +35,9 @@ async def main():
     dp = Dispatcher()
     dp.include_router(start_router)
     dp.include_router(menu_router)
+    dp.include_router(admin_router)
+    dp = Dispatcher(storage=MemoryStorage())
+
     print("=== Bot started (print) ===")
     logger.info("Bot started")
 
