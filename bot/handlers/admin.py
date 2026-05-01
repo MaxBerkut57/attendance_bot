@@ -21,11 +21,36 @@ class AdminActions(StatesGroup):
     waiting_group_curator = State()
     waiting_username_editfn = State()
     waiting_new_fullname = State()
+    waiting_username_unlink = State()
 
 async def find_user_by_username(session, username: str) -> User | None:
     stmt = select(User).where(User.username == username)
     result = await session.execute(stmt)
     return result.scalars().first()
+
+@router.callback_query(F.data == "admin_unlink_username")
+async def start_unlink_username(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.answer("Введите username, который нужно отвязать (без @):", reply_markup=cancel_kb)
+    await state.set_state(AdminActions.waiting_username_unlink)
+    await callback.answer()
+
+@router.message(StateFilter(AdminActions.waiting_username_unlink))
+async def process_unlink_username(message: types.Message, state: FSMContext):
+    username = message.text.strip()
+    async with async_session() as session:
+        user = await find_user_by_username(session, username)
+        if not user:
+            await message.answer("Пользователь с таким username не найден.")
+            await state.clear()
+            return
+        # Отвязываем: сбрасываем user_id
+        user.user_id = None
+        # Удаляем все членства в группах, где он был как студент (опционально)
+        # Лучше просто оставить, чтобы при повторной привязке они восстановились.
+        await session.commit()
+        logger.info(f"Username unlinked: {username}")
+        await message.answer(f"Username @{username} успешно отвязан. Теперь его можно привязать к новому Telegram ID.")
+    await state.clear()
 
 # ==================== МЕНЮ АДМИНИСТРИРОВАНИЯ ====================
 @router.callback_query(F.data == "menu_admin")
@@ -37,6 +62,7 @@ async def admin_menu(callback: types.CallbackQuery):
         [types.InlineKeyboardButton(text="📂 Все группы", callback_data="admin_list_groups")],
         [types.InlineKeyboardButton(text="🔙 Назад", callback_data="menu_back")],
         [types.InlineKeyboardButton(text="📋 Загрузить список студентов", callback_data="admin_upload_list")],
+        [types.InlineKeyboardButton(text="🔓 Отвязать username", callback_data="admin_unlink_username")],
     ])
     await callback.message.edit_text("⚙️ Панель администратора", reply_markup=keyboard)
     await callback.answer()
