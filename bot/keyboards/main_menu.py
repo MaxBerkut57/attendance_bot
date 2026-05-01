@@ -51,6 +51,10 @@ async def get_reply_keyboard(user: User, session) -> ReplyKeyboardMarkup:
 
     # Админ
     if user.is_admin:
+        buttons.append([KeyboardButton(text="👥 Моя группа")])
+        buttons.append([KeyboardButton(text="📅 Загрузить расписание")])
+        buttons.append([KeyboardButton(text="📈 Отчёт")])
+        buttons.append([KeyboardButton(text="📊 Процент посещаемости")])
         buttons.append([KeyboardButton(text="⚙️ Администрирование")])
 
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
