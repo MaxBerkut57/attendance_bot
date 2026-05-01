@@ -9,6 +9,8 @@ from bot.db.database import async_session
 from bot.db.models import User, Group, GroupMembership
 from bot.keyboards.main_menu import get_main_menu
 from bot.logger import logger
+import secrets
+from bot.db.models import PendingInvite
 
 router = Router()
 
@@ -126,6 +128,7 @@ async def process_student_list_file(message: types.Message, state: FSMContext):
     added = 0
     updated = 0
     errors = 0
+    pending_links = []
 
     async with async_session() as session:
         for row in ws.iter_rows(min_row=2, values_only=True):
@@ -136,8 +139,23 @@ async def process_student_list_file(message: types.Message, state: FSMContext):
             if not full_name or not username:
                 errors += 1
                 continue
+            if not username:  # <-- НОВОЕ
+                token = secrets.token_urlsafe(32)
+                artificial_username = f"invite_{token}"
+                user = User(
+                    user_id=None,
+                    username=artificial_username,
+                    full_name=full_name,
+                    is_admin=False
+                )
+                session.add(user)
+                await session.flush()
+                session.add(GroupMembership(user_id=None, group_id=group_id))
+                session.add(PendingInvite(token=token, user_id=user.user_id))
+                pending_links.append((full_name, token))
+                continue
 
-            # Найти или создать пользователя
+                # Найти или создать пользователя
             stmt = select(User).where(User.username == username)
             result = await session.execute(stmt)
             user = result.scalars().first()
