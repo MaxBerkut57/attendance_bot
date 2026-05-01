@@ -21,7 +21,7 @@ async def cmd_start(message: types.Message):
         if user:
             # Обновляем данные (username мог измениться)
             user.username = username
-            user.full_name = full_name
+            # user.full_name = full_name
             await session.commit()
             await message.answer(
                 f"С возвращением, {user.full_name}!",
