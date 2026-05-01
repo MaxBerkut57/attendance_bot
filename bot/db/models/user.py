@@ -2,6 +2,7 @@ from sqlalchemy import BigInteger, String, Boolean, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from bot.db.base import Base
 from typing import List, Optional
+from datetime import datetime
 
 class User(Base):
     __tablename__ = "users"
