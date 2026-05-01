@@ -7,6 +7,7 @@ from bot.keyboards.main_menu import get_main_menu
 from bot.logger import logger
 import re
 from bot.db.models import PendingInvite
+from sqlalchemy import select
 
 router = Router()
 
@@ -60,7 +61,8 @@ async def cmd_start(message: types.Message):
 
     async with async_session() as session:
         # 1. Ищем пользователя по user_id
-        user = await session.get(User, user_id)
+        result = await session.execute(select(User).where(User.user_id == user_id))
+        user = result.scalars().first()
         if user:
             # Обновляем данные (username мог измениться)
             user.username = username

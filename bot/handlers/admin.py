@@ -202,7 +202,8 @@ async def process_new_fullname(message: types.Message, state: FSMContext):
     user_id = data["edit_user_id"]
     username = data["edit_username"]
     async with async_session() as session:
-        user = await session.get(User, user_id)
+        result = await session.execute(select(User).where(User.user_id == user_id))
+        user = result.scalars().first()
         if not user:
             await message.answer("Пользователь не найден.")
             await state.clear()
@@ -229,7 +230,8 @@ async def list_groups(callback: types.CallbackQuery):
 @router.callback_query(F.data == "menu_back")
 async def back_to_main(callback: types.CallbackQuery):
     async with async_session() as session:
-        user = await session.get(User, callback.from_user.id)
+        result = await session.execute(select(User).where(User.user_id == callback.from_user.id))
+        user = result.scalars().first()
         if user:
             await callback.message.edit_text("Главное меню", reply_markup=await get_main_menu(user, session))
     await callback.answer()
@@ -242,7 +244,8 @@ async def cancel_action(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text("❌ Действие отменено.")
     # Вернём главное меню
     async with async_session() as session:
-        user = await session.get(User, callback.from_user.id)
+        result = await session.execute(select(User).where(User.user_id == callback.from_user.id))
+        user = result.scalars().first()
         if user:
             await callback.message.answer(
                 "Главное меню",

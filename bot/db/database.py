@@ -31,7 +31,8 @@ async def seed_admin():
             logger.info(f"Created group {settings.ADMIN_GROUP_NAME}")
 
         # Создаём пользователя-админа
-        admin_user = await session.get(User, settings.ADMIN_USER_ID)
+        admin_user = (
+            await session.execute(select(User).where(User.user_id == settings.ADMIN_USER_ID))).scalars().first()
         if not admin_user:
             admin_user = User(
                 user_id=settings.ADMIN_USER_ID,
