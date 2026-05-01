@@ -25,7 +25,7 @@ async def cmd_start(message: types.Message):
             await session.commit()
             await message.answer(
                 f"С возвращением, {user.full_name}!",
-                reply_markup= await get_main_menu(user)
+                reply_markup= await get_main_menu(user, session)
             )
             logger.info(f"Existing user logged in: {user_id}")
             return
@@ -43,7 +43,7 @@ async def cmd_start(message: types.Message):
                 await message.answer(
                     f"Вы успешно привязаны как {user.full_name}!\n"
                     "Теперь вам будут приходить опросы о посещаемости.",
-                    reply_markup= await get_main_menu(user)
+                    reply_markup= await get_main_menu(user, session)
                 )
                 logger.info(f"User linked: {username} -> {user_id}")
                 return
@@ -60,6 +60,6 @@ async def cmd_start(message: types.Message):
         await message.answer(
             "Вы зарегистрированы в системе учёта посещаемости.\n"
             "Дождитесь, пока староста добавит вас в группу.",
-            reply_markup=await get_main_menu(user)
+            reply_markup=await get_main_menu(user, session)
         )
         logger.info(f"New user registered: {user_id}")
