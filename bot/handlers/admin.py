@@ -7,7 +7,6 @@ from bot.db.database import async_session
 from bot.db.models import User, Group, GroupCurator, GroupMembership
 from bot.keyboards.main_menu import get_main_menu
 from bot.logger import logger
-from aiogram.fsm.context import FSMContext
 
 router = Router()
 
@@ -81,9 +80,17 @@ async def process_starosta_username(message: types.Message, state: FSMContext):
             await state.clear()
             return
         group.starosta_id = user.user_id
-        membership = await session.get(GroupMembership, (user.user_id, group.id))
-        if not membership:
+
+        # Проверяем наличие членства в группе
+        existing = await session.execute(
+            select(GroupMembership).where(
+                GroupMembership.user_id == user.user_id,
+                GroupMembership.group_id == group.id
+            )
+        )
+        if not existing.scalars().first():
             session.add(GroupMembership(user_id=user.user_id, group_id=group.id))
+
         await session.commit()
         logger.info(f"Starosta set: {username} for group {group.name}")
         await message.answer(f"Пользователь @{username} назначен старостой группы {group.name}.")
@@ -127,8 +134,14 @@ async def process_curator_username(message: types.Message, state: FSMContext):
             await message.answer("Группа не найдена.")
             await state.clear()
             return
-        existing = await session.get(GroupCurator, (group.id, user.user_id))
-        if existing:
+
+        existing = await session.execute(
+            select(GroupCurator).where(
+                GroupCurator.group_id == group.id,
+                GroupCurator.user_id == user.user_id
+            )
+        )
+        if existing.scalars().first():
             await message.answer(f"Пользователь @{username} уже является куратором этой группы.")
         else:
             session.add(GroupCurator(group_id=group.id, user_id=user.user_id))
