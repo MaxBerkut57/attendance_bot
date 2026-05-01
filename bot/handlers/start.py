@@ -3,7 +3,7 @@ from aiogram.filters import Command
 from sqlalchemy import select
 from bot.db.database import async_session
 from bot.db.models import User, GroupMembership, Group
-from bot.keyboards.main_menu import get_main_menu
+from bot.keyboards.main_menu import get_main_menu, get_reply_keyboard
 from bot.logger import logger
 import re
 from bot.db.models import PendingInvite
@@ -54,7 +54,7 @@ async def cmd_start(message: types.Message):
 
             await message.answer(
                 f"Добро пожаловать, {user.full_name}! Вы успешно привязаны к системе.",
-                reply_markup=await get_main_menu(user, session)
+                reply_markup=await get_reply_keyboard(user, session)
             )
             return
 
@@ -70,7 +70,7 @@ async def cmd_start(message: types.Message):
             await session.commit()
             await message.answer(
                 f"С возвращением, {user.full_name}!",
-                reply_markup= await get_main_menu(user, session)
+                reply_markup= await get_reply_keyboard(user, session)
             )
             logger.info(f"Existing user logged in: {user_id}")
             return
@@ -97,7 +97,7 @@ async def cmd_start(message: types.Message):
                 await message.answer(
                     f"Вы успешно привязаны как {user.full_name}!\n"
                     "Теперь вам будут приходить опросы о посещаемости.",
-                    reply_markup= await get_main_menu(user, session)
+                    reply_markup= await get_reply_keyboard(user, session)
                 )
                 logger.info(f"User linked: {username} -> {user_id}")
                 return
@@ -125,6 +125,6 @@ async def cmd_start(message: types.Message):
         await message.answer(
             "Вы зарегистрированы в системе учёта посещаемости.\n"
             "Дождитесь, пока староста добавит вас в группу.",
-            reply_markup=await get_main_menu(user, session)
+            reply_markup=await get_reply_keyboard(user, session)
         )
         logger.info(f"New user registered: {user_id}")

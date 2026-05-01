@@ -1,4 +1,4 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from sqlalchemy import select
 from bot.db.models import User, Group, GroupCurator
 
@@ -29,3 +29,28 @@ async def get_main_menu(user: User, session) -> InlineKeyboardMarkup:
         buttons.append([InlineKeyboardButton(text="⚙️ Администрирование", callback_data="menu_admin")])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+async def get_reply_keyboard(user: User, session) -> ReplyKeyboardMarkup:
+    """Постоянная клавиатура (снизу) с основными разделами."""
+    buttons = [
+        [KeyboardButton(text="📋 Мои опросы")],
+        [KeyboardButton(text="📊 История")],
+    ]
+
+    # Староста
+    stmt = select(Group).where(Group.starosta_id == user.user_id)
+    if (await session.execute(stmt)).scalars().first():
+        buttons.append([KeyboardButton(text="👥 Моя группа")])
+        buttons.append([KeyboardButton(text="📅 Загрузить расписание")])
+        buttons.append([KeyboardButton(text="📈 Отчёт")])
+
+    # Куратор
+    stmt_cur = select(GroupCurator).where(GroupCurator.user_id == user.user_id)
+    if (await session.execute(stmt_cur)).scalars().first():
+        buttons.append([KeyboardButton(text="📊 Процент посещаемости")])
+
+    # Админ
+    if user.is_admin:
+        buttons.append([KeyboardButton(text="⚙️ Администрирование")])
+
+    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
