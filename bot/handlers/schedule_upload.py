@@ -45,6 +45,25 @@ async def admin_upload_schedule_choose(callback: types.CallbackQuery, state: FSM
     await callback.message.answer("Выберите группу для загрузки расписания:", reply_markup=keyboard)
     await callback.answer()
 
+# --- Обработчик выбора группы (для reply-кнопки и админа) ---
+@router.callback_query(F.data.startswith("schedgroup_"))
+async def choose_group_for_schedule(callback: types.CallbackQuery, state: FSMContext):
+    group_id = int(callback.data.split("_")[1])
+    async with async_session() as session:
+        group = await session.get(Group, group_id)
+        if not group:
+            await callback.message.answer("Группа не найдена.")
+            await callback.answer()
+            return
+        await state.update_data(group_id=group.id, group_name=group.name)
+    await callback.message.answer(
+        f"Отправьте Excel-файл с расписанием для группы {group.name}.\n"
+        "Ожидаемые столбцы: День недели, Дата, Время с, Время по, Дисциплина, Преподаватель, Аудитория, Группа",
+        reply_markup=cancel_kb
+    )
+    await state.set_state(ScheduleUpload.waiting_for_file)
+    await callback.answer()
+
 # --- Обработчик выбора группы (для reply-кнопки, если пользователь староста или админ) ---
 @router.message(StateFilter(ScheduleUpload.waiting_for_file), F.document)
 async def process_schedule_file(message: types.Message, state: FSMContext):
