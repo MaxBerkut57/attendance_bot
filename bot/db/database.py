@@ -51,7 +51,7 @@ async def seed_admin():
         # Добавляем в группу
         membership = await session.scalar(
             select(GroupMembership).where(
-                GroupMembership.user_id == admin_user.user_id,
+                GroupMembership.user_id == admin_user.id,
                 GroupMembership.group_id == group.id
             )
         )
