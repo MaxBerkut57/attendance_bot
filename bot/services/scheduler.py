@@ -5,13 +5,27 @@ from bot.logger import logger
 from aiogram import Bot
 from bot.services.poll_service import check_upcoming_lessons, close_expired_polls
 import functools
-import redis as sync_redis          # синхронный клиент для APScheduler
+from urllib.parse import urlparse
 
-# Создаём Redis-клиент синхронно (APScheduler использует синхронный redis внутри)
-redis_client = sync_redis.Redis.from_url(settings.REDIS_URL)
+# Парсим REDIS_URL для получения параметров подключения
+parsed = urlparse(settings.REDIS_URL)
+redis_host = parsed.hostname or 'localhost'
+redis_port = parsed.port or 6379
+redis_db = 0
+if parsed.path:
+    try:
+        redis_db = int(parsed.path.strip('/'))
+    except ValueError:
+        pass
+redis_password = parsed.password
 
 jobstores = {
-    'default': RedisJobStore(redis=redis_client)
+    'default': RedisJobStore(
+        host=redis_host,
+        port=redis_port,
+        db=redis_db,
+        password=redis_password
+    )
 }
 
 scheduler = AsyncIOScheduler(jobstores=jobstores, timezone='Europe/Moscow')
