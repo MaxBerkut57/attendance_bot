@@ -23,6 +23,7 @@ class AdminActions(StatesGroup):
     waiting_username_editfn = State()
     waiting_new_fullname = State()
     waiting_username_unlink = State()
+    waiting_group_name = State()
 
 async def find_user_by_username(session, username: str) -> User | None:
     stmt = select(User).where(User.username == username)
@@ -57,6 +58,7 @@ async def process_unlink_username(message: types.Message, state: FSMContext):
 @router.callback_query(F.data == "menu_admin")
 async def admin_menu(callback: types.CallbackQuery):
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="➕ Создать группу", callback_data="admin_create_group")],
         [types.InlineKeyboardButton(text="➕ Назначить старосту", callback_data="admin_set_starosta")],
         [types.InlineKeyboardButton(text="📌 Назначить куратора", callback_data="admin_set_curator")],
         [types.InlineKeyboardButton(text="👤 Изменить ФИО", callback_data="admin_edit_fullname")],
@@ -228,6 +230,32 @@ async def list_groups(callback: types.CallbackQuery):
             text = "Группы отсутствуют."
     await callback.message.answer(text)
     await callback.answer()
+
+@router.callback_query(F.data == "admin_create_group")
+async def start_create_group(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.answer("Введите название новой группы:", reply_markup=cancel_kb)
+    await state.set_state(AdminActions.waiting_group_name)
+    await callback.answer()
+
+@router.message(StateFilter(AdminActions.waiting_group_name))
+async def process_group_name(message: types.Message, state: FSMContext):
+    name = message.text.strip()
+    if not name:
+        await message.answer("Название не может быть пустым.")
+        return
+    async with async_session() as session:
+        # Проверим, нет ли уже такой группы
+        existing = await session.scalar(select(Group).where(Group.name == name))
+        if existing:
+            await message.answer(f"Группа «{name}» уже существует.")
+            await state.clear()
+            return
+        new_group = Group(name=name)
+        session.add(new_group)
+        await session.commit()
+        logger.info(f"Group created: {name}")
+        await message.answer(f"Группа «{name}» успешно создана.")
+    await state.clear()
 
 # ==================== НАЗАД В ГЛАВНОЕ МЕНЮ ====================
 @router.callback_query(F.data == "menu_back")
