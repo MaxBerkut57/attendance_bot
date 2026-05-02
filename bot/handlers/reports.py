@@ -4,7 +4,11 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
 from aiogram.types import BufferedInputFile
 from bot.db.database import async_session
-from bot.services.report_service import generate_group_report_for_date, generate_curator_attendance_report_for_date
+from bot.services.report_service import (
+    generate_group_report_for_date,
+    generate_curator_attendance_report_for_date,
+    generate_curator_attendance_report_for_period
+)
 from bot.logger import logger
 from datetime import date, datetime, timedelta
 from bot.keyboards.calendar import generate_calendar
