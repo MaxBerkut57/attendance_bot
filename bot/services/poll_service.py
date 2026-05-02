@@ -11,14 +11,12 @@ from bot.services.bot_instance import get_bot
 # Лимит на одновременную отправку сообщений
 MAX_CONCURRENT_SENDS = 20
 
-async def check_upcoming_lessons():
+aasync def check_upcoming_lessons():
     bot = get_bot()
     now = datetime.now()
     today = now.date()
 
     async with async_session() as session:
-        # Ищем все занятия на сегодня, которые начнутся через 5 минут или раньше (но не позже, чем через 6 минут, чтобы охватить)
-        # Более надёжно: все занятия, у которых time_start между now+5min и now+6min
         start_window = (now + timedelta(minutes=4)).time()
         end_window = (now + timedelta(minutes=6)).time()
 
@@ -30,7 +28,6 @@ async def check_upcoming_lessons():
         schedules = (await session.execute(stmt)).scalars().all()
 
         for sched in schedules:
-            # Проверяем, есть ли уже опрос для этого занятия
             existing_poll = await session.scalar(
                 select(Poll).where(Poll.schedule_id == sched.id)
             )
@@ -45,7 +42,7 @@ async def check_upcoming_lessons():
                 status='active'
             )
             session.add(poll)
-            await session.flush()
+            await session.flush()  # получаем poll.id
 
             group = await session.get(Group, sched.group_id)
             if not group:
@@ -75,6 +72,7 @@ async def check_upcoming_lessons():
                 [InlineKeyboardButton(text="❌ Отсутствую", callback_data=f"poll_{poll.id}_absent")]
             ])
 
+            # Отправляем сообщения и собираем результаты
             sem = asyncio.Semaphore(MAX_CONCURRENT_SENDS)
             async def send_to_user(member):
                 async with sem:
@@ -85,22 +83,28 @@ async def check_upcoming_lessons():
                             reply_markup=keyboard,
                             parse_mode='Markdown'
                         )
-                        poll_msg = PollMessage(
-                            poll_id=poll.id,
-                            user_id=member.user_id,
-                            message_id=msg.message_id
-                        )
-                        async with async_session() as session_inner:
-                            session_inner.add(poll_msg)
-                            await session_inner.commit()
+                        return (member.user_id, msg.message_id)
                     except Exception as e:
                         logger.error(f"Failed to send poll to {member.user_id}: {e}")
+                        return None
 
             tasks = [send_to_user(m) for m in members]
-            await asyncio.gather(*tasks)
+            results = await asyncio.gather(*tasks)
+
+            # Сохраняем сообщения в той же сессии
+            for result in results:
+                if result is not None:
+                    user_id, msg_id = result
+                    session.add(PollMessage(
+                        poll_id=poll.id,
+                        user_id=user_id,
+                        message_id=msg_id
+                    ))
 
             await session.commit()
             logger.info(f"Poll created for schedule {sched.id} ({sched.discipline})")
+
+
 async def close_expired_polls():
     """Закрывает опросы с истекшим сроком и проставляет 'absent' неответившим."""
     async with async_session() as session:
