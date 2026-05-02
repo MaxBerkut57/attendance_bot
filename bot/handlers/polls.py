@@ -64,8 +64,16 @@ async def handle_poll_answer(callback: types.CallbackQuery):
         await session.commit()
 
     # Подтверждаем пользователю
+    current_status_emoji = "✅" if status == 'present' else "❌"
+    new_text = (
+            callback.message.text.split("\n\n")[0] +  # исходный текст опроса
+            f"\n\n{current_status_emoji} Вы отметились как *{'присутствующий' if status == 'present' else 'отсутствующий'}*.\n"
+            "_Вы можете изменить ответ до закрытия опроса._"
+    )
+    # Оставляем ту же клавиатуру, что и в исходном сообщении
     await callback.message.edit_text(
-        callback.message.text + f"\n\n✅ Вы отметились как *{'присутствующий' if status == 'present' else 'отсутствующий'}*.",
-        parse_mode='Markdown'
+        new_text,
+        parse_mode='Markdown',
+        reply_markup=callback.message.reply_markup  # та же клавиатура
     )
     await callback.answer(f"Отмечено: {'присутствую' if status == 'present' else 'отсутствую'}")
