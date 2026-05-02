@@ -7,6 +7,7 @@ from bot.db.database import async_session
 from bot.db.models import User, Group, GroupCurator, GroupMembership
 from bot.keyboards.main_menu import get_main_menu, get_reply_keyboard
 from bot.logger import logger
+from datetime import datetime
 
 router = Router()
 
