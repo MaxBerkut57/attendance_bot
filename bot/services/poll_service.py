@@ -12,49 +12,50 @@ from bot.services.bot_instance import get_bot
 MAX_CONCURRENT_SENDS = 20
 
 async def check_upcoming_lessons():
-    """Проверяет расписание и создаёт опросы за 5 минут до начала."""
     bot = get_bot()
     now = datetime.now()
-    target_time = (now + timedelta(minutes=5)).time()
     today = now.date()
 
     async with async_session() as session:
-        # Ищем занятия на сегодня, которые начнутся ровно через 5 минут
+        # Ищем все занятия на сегодня, которые начнутся через 5 минут или раньше (но не позже, чем через 6 минут, чтобы охватить)
+        # Более надёжно: все занятия, у которых time_start между now+5min и now+6min
+        start_window = (now + timedelta(minutes=5)).time()
+        end_window = (now + timedelta(minutes=6)).time()
+
         stmt = select(Schedule).where(
             Schedule.date == today,
-            Schedule.time_start == target_time
+            Schedule.time_start >= start_window,
+            Schedule.time_start < end_window
         )
         schedules = (await session.execute(stmt)).scalars().all()
 
         for sched in schedules:
-            # Проверяем, есть ли уже активный или завершённый опрос для этого занятия
+            # Проверяем, есть ли уже опрос для этого занятия
             existing_poll = await session.scalar(
                 select(Poll).where(Poll.schedule_id == sched.id)
             )
             if existing_poll:
-                continue  # опрос уже создан
+                continue
 
             # Создаём опрос
-            active_until = datetime.combine(today, time(23, 59, 59)) + timedelta(days=2)  # +2 дня
+            active_until = datetime.combine(today, time(23, 59, 59)) + timedelta(days=2)
             poll = Poll(
                 schedule_id=sched.id,
                 active_until=active_until,
                 status='active'
             )
             session.add(poll)
-            await session.flush()  # чтобы получить poll.id
+            await session.flush()
 
-            # Получаем группу и студентов
             group = await session.get(Group, sched.group_id)
             if not group:
                 logger.error(f"Group not found for schedule {sched.id}")
                 continue
 
-            # Все студенты группы (включая старосту, который уже в memberships)
             members = (await session.execute(
                 select(GroupMembership).where(
                     GroupMembership.group_id == group.id,
-                    GroupMembership.user_id.isnot(None)  # только привязанные
+                    GroupMembership.user_id.isnot(None)
                 )
             )).scalars().all()
 
@@ -62,7 +63,6 @@ async def check_upcoming_lessons():
                 logger.info(f"No students in group {group.name} for poll")
                 continue
 
-            # Формируем текст опроса
             text = (
                 f"📚 *{sched.discipline}* ({sched.type})\n"
                 f"🕒 {sched.time_start.strftime('%H:%M')} – {sched.time_end.strftime('%H:%M')}\n"
@@ -75,7 +75,6 @@ async def check_upcoming_lessons():
                 [InlineKeyboardButton(text="❌ Отсутствую", callback_data=f"poll_{poll.id}_absent")]
             ])
 
-            # Рассылаем сообщения студентам с контролем скорости
             sem = asyncio.Semaphore(MAX_CONCURRENT_SENDS)
             async def send_to_user(member):
                 async with sem:
@@ -86,7 +85,6 @@ async def check_upcoming_lessons():
                             reply_markup=keyboard,
                             parse_mode='Markdown'
                         )
-                        # Сохраняем message_id в poll_messages
                         poll_msg = PollMessage(
                             poll_id=poll.id,
                             user_id=member.user_id,
@@ -101,10 +99,8 @@ async def check_upcoming_lessons():
             tasks = [send_to_user(m) for m in members]
             await asyncio.gather(*tasks)
 
-            # Сохраняем основную транзакцию
             await session.commit()
             logger.info(f"Poll created for schedule {sched.id} ({sched.discipline})")
-
 async def close_expired_polls():
     """Закрывает опросы с истекшим сроком и проставляет 'absent' неответившим."""
     async with async_session() as session:
