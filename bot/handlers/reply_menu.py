@@ -22,8 +22,28 @@ async def get_starosta_group(session, user_id: int) -> Group | None:
 
 @router.message(F.text == "📋 Мои опросы")
 async def my_polls_reply(message: types.Message):
-    # Здесь будет логика показа активных опросов студента
-    await message.answer("📋 Здесь будут ваши активные опросы (в разработке).")
+    async with async_session() as session:
+        user_id = message.from_user.id
+        # Ищем активные опросы, где пользователь является членом группы
+        stmt = (select(Poll).join(Schedule).join(Group).join(GroupMembership)
+                .where(GroupMembership.user_id == user_id, Poll.status == 'active'))
+        polls = (await session.execute(stmt)).scalars().all()
+        if not polls:
+            await message.answer("Активных опросов нет.")
+            return
+        for poll in polls:
+            sched = await session.get(Schedule, poll.schedule_id)
+            text = (
+                f"📚 *{sched.discipline}* ({sched.type})\n"
+                f"🕒 {sched.time_start.strftime('%H:%M')} – {sched.time_end.strftime('%H:%M')}\n"
+                f"🏫 {sched.audience or 'нет'}\n"
+                f"👨‍🏫 {sched.teacher or 'нет'}"
+            )
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="✅ Присутствую", callback_data=f"poll_{poll.id}_present")],
+                [InlineKeyboardButton(text="❌ Отсутствую", callback_data=f"poll_{poll.id}_absent")]
+            ])
+            await message.answer(text, reply_markup=keyboard)
 
 @router.message(F.text == "📊 История")
 async def history_reply(message: types.Message):

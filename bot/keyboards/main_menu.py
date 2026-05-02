@@ -33,6 +33,7 @@ async def get_main_menu(user: User, session) -> InlineKeyboardMarkup:
 async def get_reply_keyboard(user: User, session) -> ReplyKeyboardMarkup:
     """Постоянная клавиатура (снизу) с основными разделами."""
     buttons = [
+        [KeyboardButton(text="📅 Расписание")],
         [KeyboardButton(text="📋 Мои опросы")],
         [KeyboardButton(text="📊 История")],
     ]
@@ -48,6 +49,10 @@ async def get_reply_keyboard(user: User, session) -> ReplyKeyboardMarkup:
     # Куратор
     stmt_cur = select(GroupCurator).where(GroupCurator.user_id == user.user_id)
     if (await session.execute(stmt_cur)).scalars().first():
+        buttons.append([KeyboardButton(text="👥 Моя группа")])
+        buttons.append([KeyboardButton(text="📅 Загрузить расписание")])
+        buttons.append([KeyboardButton(text="🗑 Удалить расписание")])
+        buttons.append([KeyboardButton(text="📈 Отчёт")])
         buttons.append([KeyboardButton(text="📊 Процент посещаемости")])
 
     # Админ

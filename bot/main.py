@@ -18,6 +18,7 @@ from bot.handlers.polls import router as polls_router
 from bot.services.poll_service import check_upcoming_lessons
 from bot.services.bot_instance import set_bot
 from bot.handlers.reports import router as reports_router
+from bot.handlers.schedule_view import router as schedule_view_router
 
 class ProxiedAiohttpSession(AiohttpSession):
     def __init__(self, proxy_url: str, **kwargs):
@@ -50,6 +51,7 @@ async def main():
     dp.include_router(reply_menu_router)
     dp.include_router(polls_router)
     dp.include_router(reports_router)
+    dp.include_router(schedule_view_router)
 
     await start_scheduler()
 

@@ -4,63 +4,116 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
 from aiogram.types import BufferedInputFile
 from bot.db.database import async_session
-from bot.services.report_service import generate_group_report, generate_curator_attendance_report
+from bot.services.report_service import generate_group_report_for_date, generate_curator_attendance_report_for_date
 from bot.logger import logger
-from datetime import datetime
+from datetime import date, datetime, timedelta
+from bot.keyboards.calendar import generate_calendar
+from sqlalchemy import select
+from bot.db.models import Schedule, Poll
 
 router = Router()
 
-class ReportStates(StatesGroup):
-    waiting_dates = State()
+cancel_kb = types.InlineKeyboardMarkup(
+    inline_keyboard=[[types.InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_action")]]
+)
+
+class ReportState(StatesGroup):
+    waiting_date = State()
+    waiting_subject = State()
+
+async def show_calendar(message: types.Message, state: FSMContext, prefix: str):
+    today = date.today()
+    await message.answer(
+        "Выберите дату:",
+        reply_markup=generate_calendar(today, prefix)
+    )
+    await state.set_state(ReportState.waiting_date)
 
 @router.callback_query(F.data.startswith("reportgroup_"))
 async def choose_group_for_report(callback: types.CallbackQuery, state: FSMContext):
     group_id = int(callback.data.split("_")[1])
     await state.update_data(group_id=group_id, report_type="general")
-    await callback.message.answer("Введите начальную и конечную дату (ГГГГ-ММ-ДД ГГГГ-ММ-ДД) или одну дату (ГГГГ-ММ-ДД):")
-    await state.set_state(ReportStates.waiting_dates)
+    await show_calendar(callback.message, state, "report_date")
     await callback.answer()
 
 @router.callback_query(F.data.startswith("curatt_"))
 async def curator_attendance_request(callback: types.CallbackQuery, state: FSMContext):
     group_id = int(callback.data.split("_")[1])
     await state.update_data(group_id=group_id, report_type="curator")
-    await callback.message.answer("Введите начальную и конечную дату (ГГГГ-ММ-ДД ГГГГ-ММ-ДД) или одну дату:")
-    await state.set_state(ReportStates.waiting_dates)
+    await show_calendar(callback.message, state, "cur_date")
     await callback.answer()
 
-@router.message(StateFilter(ReportStates.waiting_dates))
-async def process_dates_and_generate(message: types.Message, state: FSMContext):
+@router.callback_query(F.data.startswith("cal_shift:"))
+async def calendar_shift(callback: types.CallbackQuery, state: FSMContext):
+    _, prefix, date_str = callback.data.split(":")
+    shift_date = date.fromisoformat(date_str)
+    await callback.message.edit_reply_markup(
+        reply_markup=generate_calendar(shift_date, prefix)
+    )
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("report_date:"), StateFilter(ReportState.waiting_date))
+async def general_report_date_selected(callback: types.CallbackQuery, state: FSMContext):
+    date_str = callback.data.split(":")[1]
+    selected_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    await state.update_data(selected_date=selected_date)
+    await state.set_state(ReportState.waiting_subject)
+    async with async_session() as session:
+        data = await state.get_data()
+        group_id = data["group_id"]
+        schedules = (await session.execute(
+            select(Schedule).join(Poll).where(
+                Schedule.group_id == group_id,
+                Schedule.date == selected_date,
+                Poll.status.in_(['active', 'finished'])
+            )
+        )).scalars().all()
+        if not schedules:
+            await callback.message.answer("Занятий с опросами на эту дату нет.")
+            await state.clear()
+            await callback.answer()
+            return
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text=s.discipline, callback_data=f"subj_{s.id}")] for s in schedules
+        ] + [[types.InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_action")]])
+        await callback.message.answer("Выберите дисциплину:", reply_markup=keyboard)
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("cur_date:"), StateFilter(ReportState.waiting_date))
+async def curator_date_selected(callback: types.CallbackQuery, state: FSMContext):
+    date_str = callback.data.split(":")[1]
+    selected_date = datetime.strptime(date_str, "%Y-%m-%d").date()
     data = await state.get_data()
     group_id = data["group_id"]
-    report_type = data.get("report_type", "general")
-    dates = message.text.strip().split()
     try:
-        if len(dates) == 1:
-            start_date = end_date = dates[0]
-        elif len(dates) == 2:
-            start_date, end_date = dates[0], dates[1]
-        else:
-            raise ValueError
-        # Проверка формата
-        datetime.strptime(start_date, "%Y-%m-%d")
-        datetime.strptime(end_date, "%Y-%m-%d")
-    except Exception:
-        await message.answer("Ошибка формата дат. Введите даты в формате ГГГГ-ММ-ДД (одну или две через пробел).")
-        return
-
-    try:
-        if report_type == "general":
-            buf_bytes = await generate_group_report(group_id, start_date, end_date)
-            caption = f"Отчёт по группе за {start_date} — {end_date}"
-        else:
-            buf_bytes = await generate_curator_attendance_report(group_id, start_date, end_date)
-            caption = f"Процент посещаемости группы за {start_date} — {end_date}"
-
-        file = BufferedInputFile(buf_bytes, filename="report.xlsx")
-        await message.answer_document(file, caption=caption)
+        buf_bytes = await generate_curator_attendance_report_for_date(group_id, selected_date)
+        caption = f"Посещаемость за {date_str}"
+        file = BufferedInputFile(buf_bytes, filename="attendance.xlsx")
+        await callback.message.answer_document(file, caption=caption)
     except Exception as e:
-        logger.error(f"Report generation failed: {e}")
-        await message.answer(f"Ошибка при создании отчёта: {e}")
-    finally:
-        await state.clear()
+        logger.error(f"Curator report error: {e}")
+        await callback.message.answer(f"Ошибка: {e}")
+    await state.clear()
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("subj_"), StateFilter(ReportState.waiting_subject))
+async def subject_selected(callback: types.CallbackQuery, state: FSMContext):
+    sched_id = int(callback.data.split("_")[1])
+    data = await state.get_data()
+    group_id = data["group_id"]
+    try:
+        buf_bytes = await generate_group_report_for_date(group_id, sched_id)
+        caption = "Отчёт по занятию"
+        file = BufferedInputFile(buf_bytes, filename="report.xlsx")
+        await callback.message.answer_document(file, caption=caption)
+    except Exception as e:
+        logger.error(f"Report error: {e}")
+        await callback.message.answer(f"Ошибка: {e}")
+    await state.clear()
+    await callback.answer()
+
+@router.callback_query(F.data == "cancel_action", StateFilter(ReportState.waiting_date, ReportState.waiting_subject))
+async def cancel_report(callback: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.edit_text("❌ Действие отменено.")
+    await callback.answer()

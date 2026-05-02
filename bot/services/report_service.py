@@ -1,17 +1,25 @@
 import io
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, date
 from sqlalchemy import select
+from openpyxl import Workbook
+from openpyxl.styles import PatternFill, Font
 from bot.db.database import async_session
 from bot.db.models import (Poll, Attendance, User, GroupMembership,
-                           Group, GroupCurator, Schedule, PollMessage)
+                           Group, Schedule, PollMessage)
 from bot.logger import logger
-from aiogram import Bot
 from aiogram.types import BufferedInputFile
 from bot.services.bot_instance import get_bot
 
+# Цвета
+GREEN_FILL = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+RED_FILL = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+YELLOW_FILL = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
+HEADER_FILL = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+HEADER_FONT = Font(color="FFFFFF", bold=True)
+
 async def generate_attendance_excel(poll_id: int) -> bytes:
-    """Создаёт Excel‑файл с результатами опроса и возвращает байты."""
+    """Генерирует Excel с результатами конкретного опроса (для автоматической отправки после закрытия)."""
     async with async_session() as session:
         poll = await session.get(Poll, poll_id)
         if not poll:
@@ -20,24 +28,138 @@ async def generate_attendance_excel(poll_id: int) -> bytes:
         group = await session.get(Group, schedule.group_id)
 
         members = (await session.execute(
-            select(User, GroupMembership).join(
-                GroupMembership, GroupMembership.user_id == User.user_id
-            ).where(GroupMembership.group_id == group.id)
-        )).all()
+            select(User).join(GroupMembership).where(GroupMembership.group_id == group.id)
+        )).scalars().all()
 
-        data = []
-        for user, _ in members:
-            attendance = await session.get(Attendance, (poll_id, user.user_id))
-            if attendance:
-                status = "присутствовал" if attendance.status == "present" else "отсутствовал"
+        wb = Workbook()
+        ws = wb.active
+        ws.title = f"Опрос {poll.id}"
+        ws.append(["ФИО", "Статус"])
+
+        # Стили для заголовка
+        for cell in ws[1]:
+            cell.fill = HEADER_FILL
+            cell.font = HEADER_FONT
+
+        for user in members:
+            att = await session.get(Attendance, (poll_id, user.user_id))
+            if att:
+                status = "присутствовал" if att.status == "present" else "отсутствовал"
+                fill = GREEN_FILL if status == "присутствовал" else RED_FILL
             else:
-                status = "не отметился"
-            data.append((user.full_name, status))
+                # Если опрос активен – "не отметился" жёлтым, иначе красным
+                if poll.status == 'active':
+                    status = "не отметился"
+                    fill = YELLOW_FILL
+                else:
+                    status = "не отметился"
+                    fill = RED_FILL
+            row = [user.full_name, status]
+            ws.append(row)
+            ws.cell(row=ws._current_row, column=2).fill = fill
 
-        df = pd.DataFrame(data, columns=["ФИО", "Статус"])
         buf = io.BytesIO()
-        with pd.ExcelWriter(buf, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name=f"Опрос {poll_id}")
+        wb.save(buf)
+        return buf.getvalue()
+
+async def generate_group_report_for_date(group_id: int, sched_id: int) -> bytes:
+    """Отчёт по конкретному занятию (для ручного запроса)."""
+    async with async_session() as session:
+        schedule = await session.get(Schedule, sched_id)
+        if not schedule:
+            raise ValueError("Расписание не найдено")
+        poll = (await session.execute(
+            select(Poll).where(Poll.schedule_id == sched_id)
+        )).scalars().first()
+        if not poll:
+            raise ValueError("Опрос не найден")
+
+        members = (await session.execute(
+            select(User).join(GroupMembership).where(GroupMembership.group_id == group_id)
+        )).scalars().all()
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = f"{schedule.discipline}"
+        ws.append(["ФИО", "Статус"])
+        for cell in ws[1]:
+            cell.fill = HEADER_FILL
+            cell.font = HEADER_FONT
+
+        for user in members:
+            att = await session.get(Attendance, (poll.id, user.user_id))
+            if att:
+                status = "присутствовал" if att.status == "present" else "отсутствовал"
+                fill = GREEN_FILL if status == "присутствовал" else RED_FILL
+            else:
+                if poll.status == 'active':
+                    status = "не отметился"
+                    fill = YELLOW_FILL
+                else:
+                    status = "не отметился"
+                    fill = RED_FILL
+            row = [user.full_name, status]
+            ws.append(row)
+            ws.cell(row=ws._current_row, column=2).fill = fill
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        return buf.getvalue()
+
+async def generate_curator_attendance_report_for_date(group_id: int, target_date: date) -> bytes:
+    """Сводный отчёт за конкретную дату для куратора."""
+    async with async_session() as session:
+        # Все занятия в этот день с опросами (любого статуса)
+        schedules = (await session.execute(
+            select(Schedule).join(Poll).where(
+                Schedule.group_id == group_id,
+                Schedule.date == target_date,
+                Poll.status.in_(['active', 'finished'])
+            )
+        )).scalars().all()
+
+        if not schedules:
+            raise ValueError("Нет занятий с опросами на эту дату")
+
+        members = (await session.execute(
+            select(User).join(GroupMembership).where(GroupMembership.group_id == group_id)
+        )).scalars().all()
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = f"Посещаемость {target_date}"
+        headers = ["ФИО"]
+        for s in schedules:
+            headers.append(s.discipline)
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.fill = HEADER_FILL
+            cell.font = HEADER_FONT
+
+        # Для каждого студента собираем статусы по всем занятиям
+        for user in members:
+            row = [user.full_name]
+            for sched in schedules:
+                poll = (await session.execute(
+                    select(Poll).where(Poll.schedule_id == sched.id)
+                )).scalars().first()
+                if not poll:
+                    row.append("")
+                    continue
+                att = await session.get(Attendance, (poll.id, user.user_id))
+                if att:
+                    status = "+" if att.status == "present" else "-"
+                    fill = GREEN_FILL if status == "+" else RED_FILL
+                else:
+                    status = "?" if poll.status == 'active' else "-"
+                    fill = YELLOW_FILL if poll.status == 'active' else RED_FILL
+                cell = ws.cell(row=len(row)+1, column=len(row))
+                cell.value = status
+                cell.fill = fill
+            ws.append(row)
+
+        buf = io.BytesIO()
+        wb.save(buf)
         return buf.getvalue()
 
 async def send_report_to_starosta(poll: Poll):
@@ -47,7 +169,6 @@ async def send_report_to_starosta(poll: Poll):
         schedule = await session.get(Schedule, poll.schedule_id)
         group = await session.get(Group, schedule.group_id)
         if not group or not group.starosta_id:
-            logger.info(f"No starosta for group {group.name if group else '?'}")
             return
         try:
             file_bytes = await generate_attendance_excel(poll.id)
@@ -64,97 +185,4 @@ async def send_report_to_starosta(poll: Poll):
             await session.commit()
             logger.info(f"Report sent to starosta {group.starosta_id} for poll {poll.id}")
         except Exception as e:
-            logger.error(f"Failed to send report to starosta: {e}")
-
-async def generate_group_report(group_id: int, start_date: str, end_date: str) -> bytes:
-    """Отчёт по группе за период (для старосты/админа)."""
-    try:
-        start = datetime.strptime(start_date, "%Y-%m-%d").date()
-        end = datetime.strptime(end_date, "%Y-%m-%d").date()
-    except ValueError:
-        raise ValueError("Неверный формат дат. Используйте ГГГГ-ММ-ДД")
-
-    async with async_session() as session:
-        schedules = (await session.execute(
-            select(Schedule).join(Poll).where(
-                Schedule.group_id == group_id,
-                Schedule.date >= start,
-                Schedule.date <= end,
-                Poll.status == 'finished'
-            )
-        )).scalars().all()
-
-        members = (await session.execute(
-            select(User).join(GroupMembership).where(GroupMembership.group_id == group_id)
-        )).scalars().all()
-
-        rows = []
-        for user in members:
-            for sched in schedules:
-                poll = (await session.execute(
-                    select(Poll).where(Poll.schedule_id == sched.id)
-                )).scalars().first()
-                if not poll:
-                    continue
-                att = await session.get(Attendance, (poll.id, user.user_id))
-                status = "присутствовал" if att and att.status == "present" else ("отсутствовал" if att else "не отметился")
-                rows.append((user.full_name, sched.date, sched.discipline, status))
-
-        df = pd.DataFrame(rows, columns=["ФИО", "Дата", "Дисциплина", "Статус"])
-        buf = io.BytesIO()
-        with pd.ExcelWriter(buf, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name="Посещаемость")
-        return buf.getvalue()
-
-async def generate_curator_attendance_report(group_id: int, start_date: str, end_date: str) -> bytes:
-    """Сводный процент посещаемости для куратора."""
-    try:
-        start = datetime.strptime(start_date, "%Y-%m-%d").date()
-        end = datetime.strptime(end_date, "%Y-%m-%d").date()
-    except ValueError:
-        raise ValueError("Неверный формат дат. Используйте ГГГГ-ММ-ДД")
-
-    async with async_session() as session:
-        schedules = (await session.execute(
-            select(Schedule).join(Poll).where(
-                Schedule.group_id == group_id,
-                Schedule.date >= start,
-                Schedule.date <= end,
-                Poll.status == 'finished'
-            )
-        )).scalars().all()
-
-        members = (await session.execute(
-            select(User).join(GroupMembership).where(GroupMembership.group_id == group_id)
-        )).scalars().all()
-
-        total_lessons = len(schedules)
-        student_stats = []
-        for user in members:
-            present = 0
-            for sched in schedules:
-                poll = (await session.execute(
-                    select(Poll).where(Poll.schedule_id == sched.id)
-                )).scalars().first()
-                if not poll:
-                    continue
-                att = await session.get(Attendance, (poll.id, user.user_id))
-                if att and att.status == 'present':
-                    present += 1
-            percentage = (present / total_lessons * 100) if total_lessons > 0 else 0
-            student_stats.append((user.full_name, present, total_lessons, f"{percentage:.1f}%"))
-
-        total_present = sum(s[1] for s in student_stats)
-        total_possible = len(members) * total_lessons
-        group_percent = (total_present / total_possible * 100) if total_possible > 0 else 0
-
-        df_students = pd.DataFrame(student_stats, columns=["ФИО", "Посещений", "Всего занятий", "Процент"])
-        df_summary = pd.DataFrame([
-            ["Общий процент посещаемости группы", f"{group_percent:.1f}%", "", ""]
-        ], columns=df_students.columns)
-
-        buf = io.BytesIO()
-        with pd.ExcelWriter(buf, engine='openpyxl') as writer:
-            df_students.to_excel(writer, index=False, sheet_name="По студентам")
-            df_summary.to_excel(writer, startrow=len(student_stats)+2, index=False, sheet_name="По студентам")
-        return buf.getvalue()
+            logger.error(f"Failed to send report: {e}")
