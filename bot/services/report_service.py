@@ -109,7 +109,6 @@ async def generate_group_report_for_date(group_id: int, sched_id: int) -> bytes:
 async def generate_curator_attendance_report_for_date(group_id: int, target_date: date) -> bytes:
     """Сводный отчёт за конкретную дату для куратора."""
     async with async_session() as session:
-        # Все занятия в этот день с опросами (любого статуса)
         schedules = (await session.execute(
             select(Schedule).join(Poll).where(
                 Schedule.group_id == group_id,
@@ -128,15 +127,13 @@ async def generate_curator_attendance_report_for_date(group_id: int, target_date
         wb = Workbook()
         ws = wb.active
         ws.title = f"Посещаемость {target_date}"
-        headers = ["ФИО"]
-        for s in schedules:
-            headers.append(s.discipline)
+        headers = ["ФИО"] + [s.discipline for s in schedules]
         ws.append(headers)
         for cell in ws[1]:
             cell.fill = HEADER_FILL
             cell.font = HEADER_FONT
 
-        # Для каждого студента собираем статусы по всем занятиям
+        # Для каждого студента собираем статусы
         for user in members:
             row = [user.full_name]
             for sched in schedules:
@@ -144,19 +141,24 @@ async def generate_curator_attendance_report_for_date(group_id: int, target_date
                     select(Poll).where(Poll.schedule_id == sched.id)
                 )).scalars().first()
                 if not poll:
-                    row.append("")
+                    row.append("")  # нет опроса — пусто
                     continue
                 att = await session.get(Attendance, (poll.id, user.user_id))
                 if att:
                     status = "+" if att.status == "present" else "-"
-                    fill = GREEN_FILL if status == "+" else RED_FILL
                 else:
                     status = "?" if poll.status == 'active' else "-"
-                    fill = YELLOW_FILL if poll.status == 'active' else RED_FILL
-                cell = ws.cell(row=len(row)+1, column=len(row))
-                cell.value = status
-                cell.fill = fill
+                row.append(status)
             ws.append(row)
+            # Раскрашиваем ячейки статусов
+            for col_idx, value in enumerate(row[1:], start=2):
+                cell = ws.cell(row=ws._current_row, column=col_idx)
+                if value == "+":
+                    cell.fill = GREEN_FILL
+                elif value == "-":
+                    cell.fill = RED_FILL
+                elif value == "?":
+                    cell.fill = YELLOW_FILL
 
         buf = io.BytesIO()
         wb.save(buf)

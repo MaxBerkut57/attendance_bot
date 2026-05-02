@@ -24,14 +24,16 @@ async def get_starosta_group(session, user_id: int) -> Group | None:
 async def my_polls_reply(message: types.Message):
     async with async_session() as session:
         user_id = message.from_user.id
-        # Ищем активные опросы, где пользователь является членом группы
-        stmt = (select(Poll).join(Schedule).join(Group).join(GroupMembership)
-                .where(GroupMembership.user_id == user_id, Poll.status == 'active'))
-        polls = (await session.execute(stmt)).scalars().all()
-        if not polls:
+        # Активные опросы, отправленные пользователю (есть в poll_messages)
+        stmt = (select(Poll, PollMessage).join(PollMessage).where(
+            PollMessage.user_id == user_id,
+            Poll.status == 'active'
+        ))
+        results = (await session.execute(stmt)).all()
+        if not results:
             await message.answer("Активных опросов нет.")
             return
-        for poll in polls:
+        for poll, _ in results:
             sched = await session.get(Schedule, poll.schedule_id)
             text = (
                 f"📚 *{sched.discipline}* ({sched.type})\n"
@@ -47,7 +49,22 @@ async def my_polls_reply(message: types.Message):
 
 @router.message(F.text == "📊 История")
 async def history_reply(message: types.Message):
-    await message.answer("📊 Здесь будет история посещений (в разработке).")
+    async with async_session() as session:
+        user_id = message.from_user.id
+        stmt = (select(Poll, PollMessage, Attendance).join(PollMessage).outerjoin(Attendance,
+                (Attendance.poll_id == Poll.id) & (Attendance.user_id == user_id))
+                .where(PollMessage.user_id == user_id, Poll.status == 'finished'))
+        results = (await session.execute(stmt)).all()
+        if not results:
+            await message.answer("История посещений пуста.")
+            return
+        history_lines = []
+        for poll, _, att in results:
+            sched = await session.get(Schedule, poll.schedule_id)
+            status = "присутствовал" if att and att.status == 'present' else ("отсутствовал" if att else "не отметился")
+            line = f"{sched.date} {sched.discipline}: {status}"
+            history_lines.append(line)
+        await message.answer("История:\n" + "\n".join(history_lines[-10:]))  # последние 10 записей
 
 # --- Групповые действия (для старосты и админа) ---
 
