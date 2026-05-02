@@ -2,7 +2,7 @@ from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
 from sqlalchemy import select, delete
 from bot.db.database import async_session
-from bot.db.models import User, Group, GroupCurator, GroupMembership, Schedule, Poll
+from bot.db.models import User, Group, GroupCurator, GroupMembership, Poll, PollMessage, Attendance, Schedule
 from bot.keyboards.main_menu import get_reply_keyboard
 from bot.logger import logger
 from aiogram.fsm.context import FSMContext
