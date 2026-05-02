@@ -7,7 +7,7 @@ from bot.keyboards.main_menu import get_reply_keyboard
 from bot.logger import logger
 from aiogram.fsm.context import FSMContext
 from bot.handlers.schedule_upload import ScheduleUpload, cancel_kb
-from bot.handlers.reports import ReportStates
+from bot.handlers.reports import ReportState
 from datetime import datetime
 
 router = Router()
@@ -127,7 +127,7 @@ async def report_reply(message: types.Message, state: FSMContext):
             await message.answer(
                 "Введите дату или диапазон дат (ГГГГ-ММ-ДД [ГГГГ-ММ-ДД]):"
             )
-            await state.set_state(ReportStates.waiting_dates)
+            await state.set_state(ReportState.waiting_dates)
             return
 
         # 2. Если админ — выбор группы
