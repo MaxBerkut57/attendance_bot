@@ -7,6 +7,7 @@ from bot.keyboards.main_menu import get_reply_keyboard
 from bot.logger import logger
 from aiogram.fsm.context import FSMContext
 from bot.handlers.schedule_upload import ScheduleUpload, cancel_kb
+from bot.handlers.reports import ReportStates
 
 router = Router()
 
@@ -96,23 +97,31 @@ async def upload_schedule_reply(message: types.Message, state: FSMContext):
     await message.answer("У вас нет прав для загрузки расписания.")
 
 @router.message(F.text == "📈 Отчёт")
-async def report_reply(message: types.Message):
+async def report_reply(message: types.Message, state: FSMContext):
     async with async_session() as session:
+        # 1. Если пользователь — староста, сразу запрашиваем даты для его группы
         group = await get_starosta_group(session, message.from_user.id)
         if group:
-            await message.answer(f"Отчёт для группы «{group.name}» (в разработке).")
+            await state.update_data(group_id=group.id, report_type="general")
+            await message.answer(
+                "Введите дату или диапазон дат (ГГГГ-ММ-ДД [ГГГГ-ММ-ДД]):"
+            )
+            await state.set_state(ReportStates.waiting_dates)
             return
 
-        result = await session.execute(
+        # 2. Если админ — выбор группы
+        user = (await session.execute(
             select(User).where(User.user_id == message.from_user.id)
-        )
-        user = result.scalars().first()
+        )).scalars().first()
         if user and user.is_admin:
             groups = (await session.execute(select(Group))).scalars().all()
+            if not groups:
+                await message.answer("Нет доступных групп.")
+                return
             keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
                 [types.InlineKeyboardButton(text=g.name, callback_data=f"reportgroup_{g.id}")] for g in groups
             ] + [[types.InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_action")]])
-            await message.answer("Выберите группу для просмотра отчёта:", reply_markup=keyboard)
+            await message.answer("Выберите группу для отчёта:", reply_markup=keyboard)
             return
 
     await message.answer("У вас нет прав на просмотр отчётов.")
@@ -144,6 +153,21 @@ async def curator_attendance_reply(message: types.Message):
             return
 
     await message.answer("У вас нет прав для просмотра процента посещаемости.")
+
+@router.message(F.text == "🗑 Удалить расписание")
+async def delete_schedule_reply(message: types.Message, state: FSMContext):
+    async with async_session() as session:
+        user = (await session.execute(
+            select(User).where(User.user_id == message.from_user.id)
+        )).scalars().first()
+        if not user or not user.is_admin:
+            await message.answer("Доступ запрещён.")
+            return
+        groups = (await session.execute(select(Group))).scalars().all()
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text=g.name, callback_data=f"delsched_{g.id}")] for g in groups
+        ] + [[types.InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_action")]])
+        await message.answer("Выберите группу для удаления расписания:", reply_markup=keyboard)
 
 @router.message(F.text == "⚙️ Администрирование")
 async def admin_reply(message: types.Message):

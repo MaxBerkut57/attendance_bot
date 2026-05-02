@@ -65,6 +65,7 @@ async def admin_menu(callback: types.CallbackQuery):
         [types.InlineKeyboardButton(text="📋 Загрузить список студентов", callback_data="admin_upload_list")],
         [types.InlineKeyboardButton(text="🔓 Отвязать username", callback_data="admin_unlink_username")],
         [types.InlineKeyboardButton(text="👥 Список пользователей", callback_data="admin_list_users")],
+        [types.InlineKeyboardButton(text="🗑 Удалить расписание", callback_data="admin_delete_schedule")],
     ])
     await callback.message.edit_text("⚙️ Панель администратора", reply_markup=keyboard)
     await callback.answer()
@@ -294,4 +295,36 @@ async def schedule_today(callback: types.CallbackQuery):
             return
         lines = [f"{s.time_start.strftime('%H:%M')} – {s.time_end.strftime('%H:%M')} {s.discipline} ({s.audience})" for s in schedules]
         await callback.message.answer("Занятия на сегодня:\n" + "\n".join(lines))
+    await callback.answer()
+
+@router.callback_query(F.data == "admin_delete_schedule")
+async def delete_schedule_start(callback: types.CallbackQuery):
+    async with async_session() as session:
+        groups = (await session.execute(select(Group))).scalars().all()
+        if not groups:
+            await callback.message.answer("Нет групп.")
+            await callback.answer()
+            return
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text=g.name, callback_data=f"delsched_{g.id}")] for g in groups
+        ] + [[types.InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_action")]])
+    await callback.message.answer("Выберите группу для удаления расписания:", reply_markup=keyboard)
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("delsched_"))
+async def delete_schedule_group(callback: types.CallbackQuery):
+    group_id = int(callback.data.split("_")[1])
+    async with async_session() as session:
+        # Удалим только будущие занятия, у которых нет активных опросов
+        from bot.db.models import Schedule
+        today = datetime.now().date()
+        (await session.execute(
+            select(Schedule).where(
+                Schedule.group_id == group_id,
+                Schedule.date >= today,
+                ~Schedule.polls.any()
+            ).delete(synchronize_session='fetch')
+        ))
+        await session.commit()
+    await callback.message.answer(f"Расписание для группы очищено (текущие и будущие занятия без опросов удалены).")
     await callback.answer()

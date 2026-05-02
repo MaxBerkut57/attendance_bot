@@ -42,6 +42,7 @@ async def get_reply_keyboard(user: User, session) -> ReplyKeyboardMarkup:
     if (await session.execute(stmt)).scalars().first():
         buttons.append([KeyboardButton(text="👥 Моя группа")])
         buttons.append([KeyboardButton(text="📅 Загрузить расписание")])
+        buttons.append([KeyboardButton(text="🗑 Удалить расписание")])
         buttons.append([KeyboardButton(text="📈 Отчёт")])
 
     # Куратор
@@ -55,6 +56,7 @@ async def get_reply_keyboard(user: User, session) -> ReplyKeyboardMarkup:
         buttons.append([KeyboardButton(text="📅 Загрузить расписание")])
         buttons.append([KeyboardButton(text="📈 Отчёт")])
         buttons.append([KeyboardButton(text="📊 Процент посещаемости")])
+        buttons.append([KeyboardButton(text="🗑 Удалить расписание")])
         buttons.append([KeyboardButton(text="⚙️ Администрирование")])
 
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)

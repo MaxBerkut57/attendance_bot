@@ -7,6 +7,7 @@ from bot.logger import logger
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from bot.services.bot_instance import get_bot
+from bot.services.report_service import send_report_to_starosta
 
 # Лимит на одновременную отправку сообщений
 MAX_CONCURRENT_SENDS = 20
@@ -128,5 +129,8 @@ async def close_expired_polls():
                         user_id=pm.user_id,
                         status='absent'
                     ))
+            for poll in expired_polls:
+                await send_report_to_starosta(poll)
+
         await session.commit()
         logger.info(f"Closed {len(expired_polls)} expired polls")
