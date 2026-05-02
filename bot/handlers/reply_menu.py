@@ -246,6 +246,7 @@ async def admin_reply(message: types.Message):
             return
 
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="➕ Создать группу", callback_data="admin_create_group")],
         [types.InlineKeyboardButton(text="➕ Назначить старосту", callback_data="admin_set_starosta")],
         [types.InlineKeyboardButton(text="📌 Назначить куратора", callback_data="admin_set_curator")],
         [types.InlineKeyboardButton(text="👤 Изменить ФИО", callback_data="admin_edit_fullname")],
