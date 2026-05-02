@@ -111,16 +111,25 @@ async def process_schedule_file(message: types.Message, state: FSMContext):
                 lesson_date = raw_date
             else:
                 lesson_date = datetime.strptime(str(raw_date), "%d.%m.%Y").date()
+            # Явно приводим к date, если оказался datetime
+            if isinstance(lesson_date, datetime):
+                lesson_date = lesson_date.date()
+
             raw_start = row[start_col]
             if isinstance(raw_start, time):
                 start_time = raw_start
             else:
                 start_time = datetime.strptime(str(raw_start), "%H:%M").time()
+            if isinstance(start_time, datetime):
+                start_time = start_time.time()
+
             raw_end = row[end_col]
             if isinstance(raw_end, time):
                 end_time = raw_end
             else:
                 end_time = datetime.strptime(str(raw_end), "%H:%M").time()
+            if isinstance(end_time, datetime):
+                end_time = end_time.time()
         except Exception:
             continue
         disc = str(row[disc_col]).strip()
