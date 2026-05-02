@@ -29,13 +29,12 @@ jobstores = {
 
 scheduler = AsyncIOScheduler(jobstores=jobstores, timezone='Europe/Moscow')
 
-async def start_scheduler(bot: Bot):
+async def start_scheduler():
     scheduler.add_job(
         check_upcoming_lessons,
         'interval',
         seconds=60,
-        id='check_lessons',
-        kwargs={'bot': bot}
+        id='check_lessons'
     )
     scheduler.add_job(
         close_expired_polls,

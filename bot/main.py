@@ -16,6 +16,8 @@ from bot.handlers.schedule_upload import router as schedule_upload_router
 from bot.services.scheduler import start_scheduler
 from bot.handlers.polls import router as polls_router
 from bot.services.poll_service import check_upcoming_lessons
+from bot.services.bot_instance import set_bot
+
 
 class ProxiedAiohttpSession(AiohttpSession):
     def __init__(self, proxy_url: str, **kwargs):
@@ -33,6 +35,7 @@ async def main():
     if settings.PROXY_URL:
         session = ProxiedAiohttpSession(proxy_url=settings.PROXY_URL)
         bot = Bot(token=settings.BOT_TOKEN, session=session)
+        set_bot(bot)
         logger.info("Using SOCKS5 proxy for Telegram API")
     else:
         bot = Bot(token=settings.BOT_TOKEN)

@@ -6,12 +6,14 @@ from bot.db.models import Schedule, Poll, PollMessage, Attendance, GroupMembersh
 from bot.logger import logger
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from bot.services.bot_instance import get_bot
 
 # Лимит на одновременную отправку сообщений
 MAX_CONCURRENT_SENDS = 20
 
 async def check_upcoming_lessons(bot: Bot):
     """Проверяет расписание и создаёт опросы за 5 минут до начала."""
+    bot = get_bot()
     now = datetime.now()
     target_time = (now + timedelta(minutes=5)).time()
     today = now.date()
