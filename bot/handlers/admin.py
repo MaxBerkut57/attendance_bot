@@ -343,16 +343,15 @@ async def delete_schedule_start(callback: types.CallbackQuery):
 async def delete_schedule_group(callback: types.CallbackQuery):
     group_id = int(callback.data.split("_")[1])
     async with async_session() as session:
-        # Удалим только будущие занятия, у которых нет активных опросов
-        from bot.db.models import Schedule
+        from sqlalchemy import delete
         today = datetime.now().date()
-        (await session.execute(
-            select(Schedule).where(
+        await session.execute(
+            delete(Schedule).where(
                 Schedule.group_id == group_id,
                 Schedule.date >= today,
                 ~Schedule.polls.any()
-            ).delete(synchronize_session='fetch')
-        ))
+            )
+        )
         await session.commit()
     await callback.message.answer(f"Расписание для группы очищено (текущие и будущие занятия без опросов удалены).")
     await callback.answer()

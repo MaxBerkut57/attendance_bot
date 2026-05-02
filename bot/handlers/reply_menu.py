@@ -11,6 +11,7 @@ from bot.logger import logger
 from datetime import datetime
 from bot.handlers.schedule_upload import ScheduleUpload, cancel_kb
 from bot.handlers.reports import ReportState
+from sqlalchemy import delete
 
 router = Router()
 
@@ -210,11 +211,11 @@ async def delete_schedule_reply(message: types.Message, state: FSMContext):
             # Удаляем будущие занятия без опросов для своей группы
             today = datetime.now().date()
             await session.execute(
-                select(Schedule).where(
+                delete(Schedule).where(
                     Schedule.group_id == group.id,
                     Schedule.date >= today,
                     ~Schedule.polls.any()
-                ).delete(synchronize_session='fetch')
+                )
             )
             await session.commit()
             await message.answer(f"Расписание для группы {group.name} очищено (будущие занятия без опросов удалены).")
