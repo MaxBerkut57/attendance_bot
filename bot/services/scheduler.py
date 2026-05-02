@@ -33,14 +33,16 @@ async def start_scheduler():
         check_upcoming_lessons,
         'interval',
         seconds=60,
-        id='check_lessons'
+        id='check_lessons',
+        replace_existing=True
     )
     scheduler.add_job(
         close_expired_polls,
         'cron',
         hour=0,
         minute=5,
-        id='close_polls'
+        id='close_polls',
+        replace_existing=True
     )
     scheduler.start()
     logger.info("Scheduler started")
