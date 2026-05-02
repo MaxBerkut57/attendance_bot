@@ -19,42 +19,73 @@ async def cmd_start(message: types.Message):
     full_name = tg_user.full_name
 
     if message.text and message.text.startswith("/start invite_"):
-        token = message.text[13:]  # после "/start invite_"
+        token = message.text[13:]
         async with async_session() as session:
             invite = await session.get(PendingInvite, token)
             if not invite:
-                await message.answer("Недействительная ссылка приглашения.")
+                await message.answer(
+                    "Недействительная ссылка приглашения. Возможно, она уже использована или устарела.")
                 return
-            # Ищем пользователя с искусственным username
+
+            # Ищем пользователя по искусственному username
             stmt = select(User).where(User.username == f"invite_{token}")
             result = await session.execute(stmt)
             user = result.scalars().first()
             if not user:
-                await message.answer("Ошибка: пользователь не найден.")
+                await message.answer("Ошибка: пользователь не найден. Обратитесь к старосте.")
                 return
-            # Привязываем Telegram ID
-            user.user_id = user_id
-            # Обновляем username, если в Telegram он есть
-            if username:
-                user.username = username
-            # Обновляем членства в группах (где был NULL)
-            memberships = await session.execute(
-                select(GroupMembership).where(
-                    GroupMembership.user_id.is_(None),
-                    GroupMembership.user.has(User.username == f"invite_{token}")
+
+            # Проверяем, не привязан ли уже этот Telegram ID к другому аккаунту
+            existing_user = (await session.execute(
+                select(User).where(User.user_id == user_id)
+            )).scalars().first()
+            if existing_user:
+                await message.answer(
+                    f"Ваш Telegram аккаунт уже привязан к пользователю «{existing_user.full_name}».\n"
+                    "Если хотите привязать другого студента, сначала отвяжите старый аккаунт через администратора."
                 )
-            )
-            for ms in memberships.scalars():
-                ms.user_id = user_id
-            # Удаляем использованный токен
-            await session.delete(invite)
-            await session.commit()
+                return
+
+            # Проверяем, свободен ли username из Telegram (если он есть)
+            if username:
+                user_with_same_username = (await session.execute(
+                    select(User).where(User.username == username)
+                )).scalars().first()
+                if user_with_same_username and user_with_same_username.id != user.id:
+                    await message.answer(
+                        "Этот Telegram-username уже используется другим пользователем.\n"
+                        "Пожалуйста, смените username в Telegram или обратитесь к администратору."
+                    )
+                    return
+
+            try:
+                user.user_id = user_id
+                if username:
+                    user.username = username  # заменяем искусственный username на реальный
+                # Находим все членства, где этот пользователь есть (по id или по username)
+                memberships = await session.execute(
+                    select(GroupMembership).where(
+                        GroupMembership.user_id.is_(None),
+                        GroupMembership.user.has(User.id == user.id)  # ищем по id, а не по username
+                    )
+                )
+                for ms in memberships.scalars():
+                    ms.user_id = user_id
+
+                # Удаляем использованный токен
+                await session.delete(invite)
+                await session.commit()
+            except Exception as e:
+                logger.error(f"Invite activation failed: {e}")
+                await session.rollback()
+                await message.answer("Произошла ошибка при активации приглашения. Попробуйте позже.")
+                return
 
             await message.answer(
                 f"Добро пожаловать, {user.full_name}! Вы успешно привязаны к системе.",
                 reply_markup=await get_reply_keyboard(user, session)
             )
-            return
+        return
 
 
     async with async_session() as session:
