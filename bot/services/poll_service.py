@@ -19,7 +19,7 @@ async def check_upcoming_lessons():
     async with async_session() as session:
         # Ищем все занятия на сегодня, которые начнутся через 5 минут или раньше (но не позже, чем через 6 минут, чтобы охватить)
         # Более надёжно: все занятия, у которых time_start между now+5min и now+6min
-        start_window = (now - timedelta(minutes=4)).time()
+        start_window = (now + timedelta(minutes=4)).time()
         end_window = (now + timedelta(minutes=6)).time()
 
         stmt = select(Schedule).where(
