@@ -188,3 +188,63 @@ async def send_report_to_starosta(poll: Poll):
             logger.info(f"Report sent to starosta {group.starosta_id} for poll {poll.id}")
         except Exception as e:
             logger.error(f"Failed to send report: {e}")
+
+async def generate_curator_attendance_report_for_period(group_id: int, start_date: date, end_date: date) -> bytes:
+    """Сводный процент посещаемости за период для куратора."""
+    async with async_session() as session:
+        # Все занятия группы за период, у которых есть завершённые опросы
+        schedules = (await session.execute(
+            select(Schedule).join(Poll).where(
+                Schedule.group_id == group_id,
+                Schedule.date >= start_date,
+                Schedule.date <= end_date,
+                Poll.status == 'finished'  # только завершённые опросы
+            )
+        )).scalars().all()
+
+        if not schedules:
+            raise ValueError("Нет завершённых занятий с опросами за этот период")
+
+        members = (await session.execute(
+            select(User).join(GroupMembership).where(GroupMembership.group_id == group_id)
+        )).scalars().all()
+
+        total_lessons = len(schedules)
+        student_stats = []
+        for user in members:
+            present = 0
+            for sched in schedules:
+                poll = (await session.execute(
+                    select(Poll).where(Poll.schedule_id == sched.id)
+                )).scalars().first()
+                if not poll:
+                    continue
+                att = await session.get(Attendance, (poll.id, user.user_id))
+                if att and att.status == 'present':
+                    present += 1
+            percent = (present / total_lessons * 100) if total_lessons > 0 else 0
+            student_stats.append((user.full_name, present, total_lessons, f"{percent:.1f}%"))
+
+        # Общий процент по группе
+        total_present = sum(s[1] for s in student_stats)
+        total_possible = len(members) * total_lessons
+        group_percent = (total_present / total_possible * 100) if total_possible > 0 else 0
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = f"Посещаемость {start_date} - {end_date}"
+        headers = ["ФИО", "Присутствий", "Всего занятий", "Процент"]
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.fill = HEADER_FILL
+            cell.font = HEADER_FONT
+
+        for stats in student_stats:
+            ws.append(stats)
+
+        ws.append([])  # пустая строка перед итогом
+        ws.append(["Общий процент группы", "", "", f"{group_percent:.1f}%"])
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        return buf.getvalue()

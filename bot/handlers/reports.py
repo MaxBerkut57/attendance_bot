@@ -20,6 +20,8 @@ cancel_kb = types.InlineKeyboardMarkup(
 class ReportState(StatesGroup):
     waiting_date = State()
     waiting_subject = State()
+    waiting_start_date = State()
+    waiting_end_date = State()
 
 async def show_calendar(message: types.Message, state: FSMContext, prefix: str):
     today = date.today()
@@ -40,7 +42,43 @@ async def choose_group_for_report(callback: types.CallbackQuery, state: FSMConte
 async def curator_attendance_request(callback: types.CallbackQuery, state: FSMContext):
     group_id = int(callback.data.split("_")[1])
     await state.update_data(group_id=group_id, report_type="curator")
-    await show_calendar(callback.message, state, "cur_date")
+    await show_calendar(callback.message, state, "cur_start")
+    await state.set_state(ReportState.waiting_start_date)
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("cur_start:"), StateFilter(ReportState.waiting_start_date))
+async def curator_start_date_selected(callback: types.CallbackQuery, state: FSMContext):
+    date_str = callback.data.split(":")[1]
+    start_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    await state.update_data(start_date=start_date)
+    await callback.message.answer(
+        "Теперь выберите конечную дату периода:",
+        reply_markup=generate_calendar(start_date, "cur_end")
+    )
+    await state.set_state(ReportState.waiting_end_date)
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("cur_end:"), StateFilter(ReportState.waiting_end_date))
+async def curator_end_date_selected(callback: types.CallbackQuery, state: FSMContext):
+    date_str = callback.data.split(":")[1]
+    end_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    data = await state.get_data()
+    start_date = data["start_date"]
+    group_id = data["group_id"]
+    if end_date < start_date:
+        await callback.message.answer("Конечная дата не может быть раньше начальной.")
+        await state.clear()
+        await callback.answer()
+        return
+    try:
+        buf_bytes = await generate_curator_attendance_report_for_period(group_id, start_date, end_date)
+        caption = f"Посещаемость группы с {start_date} по {end_date}"
+        file = BufferedInputFile(buf_bytes, filename="attendance.xlsx")
+        await callback.message.answer_document(file, caption=caption)
+    except Exception as e:
+        logger.error(f"Curator report error: {e}")
+        await callback.message.answer(f"Ошибка: {e}")
+    await state.clear()
     await callback.answer()
 
 @router.callback_query(F.data.startswith("cal_shift:"))

@@ -1,15 +1,16 @@
 from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
-from sqlalchemy import select, delete
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from sqlalchemy import select
 from bot.db.database import async_session
-from bot.db.models import User, Group, GroupCurator, GroupMembership, Poll, PollMessage, Attendance, Schedule
+from bot.db.models import (User, Group, GroupCurator, GroupMembership,
+                           Poll, PollMessage, Attendance, Schedule,
+                           PendingInvite)
 from bot.keyboards.main_menu import get_reply_keyboard
 from bot.logger import logger
-from aiogram.fsm.context import FSMContext
+from datetime import datetime
 from bot.handlers.schedule_upload import ScheduleUpload, cancel_kb
 from bot.handlers.reports import ReportState
-from datetime import datetime
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 router = Router()
 
