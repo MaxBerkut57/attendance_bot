@@ -22,11 +22,11 @@ class GroupMembership(Base):
     __tablename__ = "group_memberships"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    user_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=True)
     group_id: Mapped[int] = mapped_column(Integer, ForeignKey("groups.id", ondelete="CASCADE"))
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    user: Mapped["User"] = relationship(back_populates="group_memberships")
+    user: Mapped[Optional["User"]] = relationship(back_populates="group_memberships")
     group: Mapped["Group"] = relationship(back_populates="memberships")
 
     __table_args__ = (

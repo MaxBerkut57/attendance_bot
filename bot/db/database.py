@@ -20,7 +20,6 @@ async def get_session():
 async def seed_admin():
     """Создать или обновить администратора и его группу."""
     async with async_session() as session:
-        # Создаём группу, если её нет
         group = await session.scalar(
             select(Group).where(Group.name == settings.ADMIN_GROUP_NAME)
         )
@@ -30,9 +29,9 @@ async def seed_admin():
             await session.flush()
             logger.info(f"Created group {settings.ADMIN_GROUP_NAME}")
 
-        # Создаём пользователя-админа
         admin_user = (
-            await session.execute(select(User).where(User.user_id == settings.ADMIN_USER_ID))).scalars().first()
+            await session.execute(select(User).where(User.user_id == settings.ADMIN_USER_ID))
+        ).scalars().first()
         if not admin_user:
             admin_user = User(
                 user_id=settings.ADMIN_USER_ID,
@@ -43,20 +42,18 @@ async def seed_admin():
             session.add(admin_user)
             logger.info(f"Created admin user {settings.ADMIN_USER_ID}")
         else:
-            # Обновляем данные на случай изменения
             admin_user.username = settings.ADMIN_USERNAME
             admin_user.full_name = settings.ADMIN_FULL_NAME
             admin_user.is_admin = True
 
-        # Добавляем в группу
         membership = await session.scalar(
             select(GroupMembership).where(
-                GroupMembership.user_id == admin_user.id,
+                GroupMembership.user_id == admin_user.user_id,
                 GroupMembership.group_id == group.id
             )
         )
         if not membership:
-            session.add(GroupMembership(user_id=admin_user.id, group_id=group.id))
+            session.add(GroupMembership(user_id=admin_user.user_id, group_id=group.id))
             logger.info(f"Added admin to group {group.name}")
 
         await session.commit()

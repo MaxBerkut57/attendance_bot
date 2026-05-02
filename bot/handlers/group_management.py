@@ -150,8 +150,8 @@ async def process_student_list_file(message: types.Message, state: FSMContext):
                 )
                 session.add(user)
                 await session.flush()
-                session.add(GroupMembership(user_id=user.id, group_id=group_id))
-                session.add(PendingInvite(token=token, user_id=user.id))
+                session.add(GroupMembership(user_id=None, group_id=group_id))
+                session.add(PendingInvite(token=token, user_id=user.user_id))
                 pending_links.append((full_name, token))
                 logger.info(f"Creating invite for {full_name}")
                 continue
@@ -177,12 +177,12 @@ async def process_student_list_file(message: types.Message, state: FSMContext):
             existing_membership = await session.execute(
                 select(GroupMembership).where(
                     GroupMembership.group_id == group_id,
-                    GroupMembership.user_id == user.id
+                    GroupMembership.user.has(User.username == username)
                 )
             )
             if not existing_membership.scalars().first():
                 session.add(GroupMembership(
-                    user_id=user.id,
+                    user_id=user.user_id,
                     group_id=group_id
                 ))
 

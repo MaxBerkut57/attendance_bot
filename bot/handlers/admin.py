@@ -115,12 +115,12 @@ async def process_starosta_username(message: types.Message, state: FSMContext):
         # Проверяем наличие членства в группе
         existing = await session.execute(
             select(GroupMembership).where(
-                GroupMembership.user_id == user.id,
+                GroupMembership.user_id == user.user_id,
                 GroupMembership.group_id == group.id
             )
         )
         if not existing.scalars().first():
-            session.add(GroupMembership(user_id=user.id, group_id=group.id))
+            session.add(GroupMembership(user_id=user.user_id, group_id=group.id))
 
         await session.commit()
         logger.info(f"Starosta set: {username} for group {group.name}")

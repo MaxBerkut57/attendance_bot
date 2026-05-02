@@ -50,7 +50,7 @@ async def handle_poll_answer(callback: types.CallbackQuery):
 
         membership = (await session.execute(
             select(GroupMembership).where(
-                GroupMembership.user_id == user.id,
+                GroupMembership.user_id == user_id,
                 GroupMembership.group_id == group_id
             )
         )).scalars().first()
