@@ -4,7 +4,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
 from sqlalchemy import select
 from bot.db.database import async_session
-from bot.db.models import User, Group, GroupCurator, GroupMembership
+from bot.db.models import User, Group, GroupCurator, GroupMembership, Schedule
 from bot.keyboards.main_menu import get_main_menu, get_reply_keyboard
 from bot.logger import logger
 from datetime import datetime
