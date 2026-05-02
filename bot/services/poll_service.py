@@ -11,7 +11,7 @@ from bot.services.bot_instance import get_bot
 # Лимит на одновременную отправку сообщений
 MAX_CONCURRENT_SENDS = 20
 
-aasync def check_upcoming_lessons():
+async def check_upcoming_lessons():
     bot = get_bot()
     now = datetime.now()
     today = now.date()
