@@ -1,14 +1,13 @@
 from aiogram import Router, types, F
 from sqlalchemy import select
 from bot.db.database import async_session
-from bot.logger import logger
 from bot.db.models import Poll, PollMessage, Attendance, User, Group, GroupMembership, Schedule
+from bot.logger import logger
 
 router = Router()
 
 @router.callback_query(F.data.startswith("poll_"))
 async def handle_poll_answer(callback: types.CallbackQuery):
-    # Разбираем callback_data: poll_<id>_<status>
     parts = callback.data.split("_")
     if len(parts) != 3:
         await callback.answer("Некорректные данные.")
@@ -25,21 +24,30 @@ async def handle_poll_answer(callback: types.CallbackQuery):
             await callback.answer("Опрос не найден.")
             return
         if poll.status != 'active':
-            # Опрос уже закрыт – сообщаем контакты старосты
-            group = (await session.execute(
-                select(Group).join(Schedule).where(Schedule.id == poll.schedule_id)
-            )).scalars().first()
-            starosta = await session.get(User, group.starosta_id) if group else None
-            await callback.answer(
-                f"Опрос закрыт. Свяжитесь со старостой: @{starosta.username or 'нет'}" if starosta else "Опрос закрыт."
-            )
+            # Опрос закрыт — узнаём группу через явный запрос
+            schedule = await session.get(Schedule, poll.schedule_id)
+            if schedule:
+                group = await session.get(Group, schedule.group_id)
+                starosta = await session.get(User, group.starosta_id) if group and group.starosta_id else None
+                await callback.answer(
+                    f"Опрос закрыт. Свяжитесь со старостой: @{starosta.username or 'нет'}" if starosta else "Опрос закрыт."
+                )
+            else:
+                await callback.answer("Опрос закрыт.")
             return
 
-        # Проверяем, что пользователь состоит в группе этого занятия
+        # Получаем group_id через schedule_id
+        schedule = await session.get(Schedule, poll.schedule_id)
+        if not schedule:
+            await callback.answer("Ошибка: расписание не найдено.")
+            return
+        group_id = schedule.group_id
+
+        # Проверяем членство в группе
         membership = (await session.execute(
             select(GroupMembership).where(
                 GroupMembership.user_id == user_id,
-                GroupMembership.group_id == poll.schedule.group_id
+                GroupMembership.group_id == group_id
             )
         )).scalars().first()
         if not membership:
