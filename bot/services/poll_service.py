@@ -123,14 +123,14 @@ async def close_expired_polls():
             for pm in poll_messages:
                 existing_attendance = await session.get(Attendance, (poll.id, pm.user_id))
                 if not existing_attendance:
-                    # Проставляем absent
                     session.add(Attendance(
                         poll_id=poll.id,
                         user_id=pm.user_id,
                         status='absent'
                     ))
-            for poll in expired_polls:
-                await send_report_to_starosta(poll)
+        # Отправляем отчёты после обработки всех опросов
+        for poll in expired_polls:
+            await send_report_to_starosta(poll)
 
         await session.commit()
         logger.info(f"Closed {len(expired_polls)} expired polls")

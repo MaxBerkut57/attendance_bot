@@ -1,13 +1,14 @@
 from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from bot.db.database import async_session
-from bot.db.models import User, Group, GroupCurator, GroupMembership
+from bot.db.models import User, Group, GroupCurator, GroupMembership, Schedule, Poll
 from bot.keyboards.main_menu import get_reply_keyboard
 from bot.logger import logger
 from aiogram.fsm.context import FSMContext
 from bot.handlers.schedule_upload import ScheduleUpload, cancel_kb
 from bot.handlers.reports import ReportStates
+from datetime import datetime
 
 router = Router()
 
@@ -160,14 +161,39 @@ async def delete_schedule_reply(message: types.Message, state: FSMContext):
         user = (await session.execute(
             select(User).where(User.user_id == message.from_user.id)
         )).scalars().first()
-        if not user or not user.is_admin:
-            await message.answer("Доступ запрещён.")
+        if not user:
+            await message.answer("Пользователь не найден.")
             return
-        groups = (await session.execute(select(Group))).scalars().all()
-        keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
-            [types.InlineKeyboardButton(text=g.name, callback_data=f"delsched_{g.id}")] for g in groups
-        ] + [[types.InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_action")]])
-        await message.answer("Выберите группу для удаления расписания:", reply_markup=keyboard)
+
+        # Староста
+        group = await get_starosta_group(session, message.from_user.id)
+        if group:
+            # Удаляем будущие занятия без опросов для своей группы
+            today = datetime.now().date()
+            await session.execute(
+                select(Schedule).where(
+                    Schedule.group_id == group.id,
+                    Schedule.date >= today,
+                    ~Schedule.polls.any()
+                ).delete(synchronize_session='fetch')
+            )
+            await session.commit()
+            await message.answer(f"Расписание для группы {group.name} очищено (будущие занятия без опросов удалены).")
+            return
+
+        # Админ
+        if user.is_admin:
+            groups = (await session.execute(select(Group))).scalars().all()
+            if not groups:
+                await message.answer("Нет доступных групп.")
+                return
+            keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+                [types.InlineKeyboardButton(text=g.name, callback_data=f"delsched_{g.id}")] for g in groups
+            ] + [[types.InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_action")]])
+            await message.answer("Выберите группу для удаления расписания:", reply_markup=keyboard)
+            return
+
+    await message.answer("У вас нет прав для удаления расписания.")
 
 @router.message(F.text == "⚙️ Администрирование")
 async def admin_reply(message: types.Message):
