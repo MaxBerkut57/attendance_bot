@@ -9,6 +9,7 @@ from aiogram.fsm.context import FSMContext
 from bot.handlers.schedule_upload import ScheduleUpload, cancel_kb
 from bot.handlers.reports import ReportState
 from datetime import datetime
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 router = Router()
 
