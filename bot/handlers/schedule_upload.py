@@ -64,13 +64,12 @@ async def choose_group_for_schedule(callback: types.CallbackQuery, state: FSMCon
     await state.set_state(ScheduleUpload.waiting_for_file)
     await callback.answer()
 
-# --- Обработчик выбора группы (для reply-кнопки, если пользователь староста или админ) ---
+# --- Обработка получения файла ---
 @router.message(StateFilter(ScheduleUpload.waiting_for_file), F.document)
 async def process_schedule_file(message: types.Message, state: FSMContext):
     document = message.document
-    file_name = document.file_name.lower()
-    if not (file_name.endswith(".xlsx") or file_name.endswith(".xls")):
-        await message.answer("Файл должен быть в формате Excel (.xlsx или .xls)")
+    if not document.file_name.endswith(".xlsx"):
+        await message.answer("Файл должен быть в формате .xlsx")
         return
 
     data = await state.get_data()
@@ -81,92 +80,53 @@ async def process_schedule_file(message: types.Message, state: FSMContext):
     buf.seek(0)
 
     try:
-        if file_name.endswith(".xls"):
-            import xlrd
-            wb = xlrd.open_workbook(file_contents=buf.read())
-            ws = wb.sheet_by_index(0)
-            headers = [ws.cell_value(0, col) for col in range(ws.ncols)]
-            try:
-                date_col = headers.index("Дата")
-                start_col = headers.index("Время с")
-                end_col = headers.index("Время по")
-                disc_col = headers.index("Дисциплина")
-                teacher_col = headers.index("Преподаватель")
-                audience_col = headers.index("Аудитория")
-            except ValueError:
-                await message.answer("Не найдены обязательные столбцы (Дата, Время с, Время по, Дисциплина, Преподаватель, Аудитория).")
-                await state.clear()
-                return
-
-            raw_lessons = []
-            for row_idx in range(1, ws.nrows):
-                row = [ws.cell_value(row_idx, col) for col in range(ws.ncols)]
-                if not row or not all([row[date_col], row[start_col], row[end_col], row[disc_col]]):
-                    continue
-                try:
-                    if isinstance(row[date_col], float):
-                        # xlrd возвращает дату как число (Excel serial)
-                        from datetime import datetime as dt
-                        lesson_date = dt(*xlrd.xldate_as_tuple(row[date_col], wb.datemode)[:3]).date()
-                    else:
-                        lesson_date = datetime.strptime(str(row[date_col]), "%d.%m.%Y").date()
-                    start_time = row[start_col]
-                    if isinstance(start_time, float):
-                        start_time = datetime(*xlrd.xldate_as_tuple(start_time, wb.datemode)[:3]).time()
-                    elif not isinstance(start_time, time):
-                        start_time = datetime.strptime(str(start_time), "%H:%M").time()
-                    end_time = row[end_col]
-                    if isinstance(end_time, float):
-                        end_time = datetime(*xlrd.xldate_as_tuple(end_time, wb.datemode)[:3]).time()
-                    elif not isinstance(end_time, time):
-                        end_time = datetime.strptime(str(end_time), "%H:%M").time()
-                except Exception:
-                    continue
-                disc = str(row[disc_col]).strip()
-                teacher = str(row[teacher_col]).strip() if row[teacher_col] else ""
-                audience = str(row[audience_col]).strip() if row[audience_col] else ""
-                raw_lessons.append((lesson_date, start_time, end_time, disc, teacher, audience))
-        else:  # .xlsx
-            wb = openpyxl.load_workbook(buf, read_only=True)
-            ws = wb.active
-            headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
-            try:
-                date_col = headers.index("Дата")
-                start_col = headers.index("Время с")
-                end_col = headers.index("Время по")
-                disc_col = headers.index("Дисциплина")
-                teacher_col = headers.index("Преподаватель")
-                audience_col = headers.index("Аудитория")
-            except ValueError:
-                await message.answer("Не найдены обязательные столбцы (Дата, Время с, Время по, Дисциплина, Преподаватель, Аудитория).")
-                await state.clear()
-                return
-            raw_lessons = []
-            for row in ws.iter_rows(min_row=2, values_only=True):
-                if not row or not all([row[date_col], row[start_col], row[end_col], row[disc_col]]):
-                    continue
-                try:
-                    if isinstance(row[date_col], date):
-                        lesson_date = row[date_col]
-                    else:
-                        lesson_date = datetime.strptime(str(row[date_col]), "%d.%m.%Y").date()
-                    start_time = row[start_col]
-                    if not isinstance(start_time, time):
-                        start_time = datetime.strptime(str(start_time), "%H:%M").time()
-                    end_time = row[end_col]
-                    if not isinstance(end_time, time):
-                        end_time = datetime.strptime(str(end_time), "%H:%M").time()
-                except Exception:
-                    continue
-                disc = str(row[disc_col]).strip()
-                teacher = str(row[teacher_col]).strip() if row[teacher_col] else ""
-                audience = str(row[audience_col]).strip() if row[audience_col] else ""
-                raw_lessons.append((lesson_date, start_time, end_time, disc, teacher, audience))
+        wb = openpyxl.load_workbook(buf, read_only=True)
+        ws = wb.active
     except Exception as e:
         logger.error(f"Excel read error: {e}")
         await message.answer("Ошибка чтения файла. Проверьте формат.")
         await state.clear()
         return
+
+    headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+    try:
+        date_col = headers.index("Дата")
+        start_col = headers.index("Время с")
+        end_col = headers.index("Время по")
+        disc_col = headers.index("Дисциплина")
+        teacher_col = headers.index("Преподаватель")
+        audience_col = headers.index("Аудитория")
+    except ValueError:
+        await message.answer("Не найдены обязательные столбцы (Дата, Время с, Время по, Дисциплина, Преподаватель, Аудитория).")
+        await state.clear()
+        return
+
+    raw_lessons = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row or not all([row[date_col], row[start_col], row[end_col], row[disc_col]]):
+            continue
+        try:
+            raw_date = row[date_col]
+            if isinstance(raw_date, date):
+                lesson_date = raw_date
+            else:
+                lesson_date = datetime.strptime(str(raw_date), "%d.%m.%Y").date()
+            raw_start = row[start_col]
+            if isinstance(raw_start, time):
+                start_time = raw_start
+            else:
+                start_time = datetime.strptime(str(raw_start), "%H:%M").time()
+            raw_end = row[end_col]
+            if isinstance(raw_end, time):
+                end_time = raw_end
+            else:
+                end_time = datetime.strptime(str(raw_end), "%H:%M").time()
+        except Exception:
+            continue
+        disc = str(row[disc_col]).strip()
+        teacher = str(row[teacher_col]).strip() if row[teacher_col] else ""
+        audience = str(row[audience_col]).strip() if row[audience_col] else ""
+        raw_lessons.append((lesson_date, start_time, end_time, disc, teacher, audience))
 
     if not raw_lessons:
         await message.answer("Файл не содержит корректных записей о занятиях.")
@@ -181,7 +141,6 @@ async def process_schedule_file(message: types.Message, state: FSMContext):
             merged.append(list(lesson))
             continue
         last = merged[-1]
-        # Условия объединения: та же дата, одинаковые дисциплина и тип, перерыв <=30 мин
         if (lesson[0] == last[0] and
             extract_type(lesson[3]) == extract_type(last[3]) and
             lesson[3] == last[3] and
@@ -211,7 +170,6 @@ async def process_schedule_file(message: types.Message, state: FSMContext):
             )).scalars().first()
 
             if existing:
-                # Если опросов ещё нет, обновляем
                 if not (await session.execute(select(Poll).where(Poll.schedule_id == existing.id))).scalars().first():
                     existing.time_end = end_time
                     existing.teacher = teacher
