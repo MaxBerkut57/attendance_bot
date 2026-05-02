@@ -13,6 +13,9 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from bot.handlers.group_management import router as group_mgmt_router
 from bot.handlers.reply_menu import router as reply_menu_router
 from bot.handlers.schedule_upload import router as schedule_upload_router
+from bot.services.scheduler import start_scheduler
+from bot.handlers.polls import router as polls_router
+from bot.services.poll_service import check_upcoming_lessons
 
 class ProxiedAiohttpSession(AiohttpSession):
     def __init__(self, proxy_url: str, **kwargs):
@@ -41,9 +44,11 @@ async def main():
     dp.include_router(admin_router)
     dp.include_router(group_mgmt_router)
     dp.include_router(reply_menu_router)
+    dp.include_router(polls_router)
+
+    await start_scheduler(bot)
 
     print("=== Bot started (print) ===")
-    logger.info("Bot started")
 
     logger.info("Bot started")
     try:
