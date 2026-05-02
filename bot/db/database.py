@@ -56,7 +56,7 @@ async def seed_admin():
             )
         )
         if not membership:
-            session.add(GroupMembership(user_id=admin_user.user_id, group_id=group.id))
+            session.add(GroupMembership(user_id=admin_user.id, group_id=group.id))
             logger.info(f"Added admin to group {group.name}")
 
         await session.commit()
