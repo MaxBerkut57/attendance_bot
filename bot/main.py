@@ -39,6 +39,7 @@ async def main():
         logger.info("Using SOCKS5 proxy for Telegram API")
     else:
         bot = Bot(token=settings.BOT_TOKEN)
+        set_bot(bot)
 
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(schedule_upload_router)
@@ -49,7 +50,7 @@ async def main():
     dp.include_router(reply_menu_router)
     dp.include_router(polls_router)
 
-    await start_scheduler(bot)
+    await start_scheduler()
 
     print("=== Bot started (print) ===")
 

@@ -2,7 +2,6 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.redis import RedisJobStore
 from bot.config import settings
 from bot.logger import logger
-from aiogram import Bot
 from bot.services.poll_service import check_upcoming_lessons, close_expired_polls
 from urllib.parse import urlparse
 
