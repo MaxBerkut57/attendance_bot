@@ -257,3 +257,22 @@ async def admin_reply(message: types.Message):
         [types.InlineKeyboardButton(text="📅 Сегодняшнее расписание", callback_data="admin_schedule_today")],
     ])
     await message.answer("⚙️ Панель администратора", reply_markup=keyboard)
+
+@router.callback_query(F.data.startswith("mygroup_"))
+async def handle_admin_mygroup_choice(callback: types.CallbackQuery):
+    group_id = int(callback.data.split("_")[1])
+    async with async_session() as session:
+        group = await session.get(Group, group_id)
+        if not group:
+            await callback.message.answer("Группа не найдена.")
+            await callback.answer()
+            return
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="📋 Загрузить список студентов", callback_data=f"uploadgroup_{group_id}")],
+            [types.InlineKeyboardButton(text="📅 Загрузить расписание", callback_data=f"schedgroup_{group_id}")],
+            [types.InlineKeyboardButton(text="📈 Отчёт", callback_data=f"reportgroup_{group_id}")],
+            [types.InlineKeyboardButton(text="🗑 Удалить расписание", callback_data=f"delsched_{group_id}")],
+            [types.InlineKeyboardButton(text="🔙 Назад", callback_data="menu_back")]
+        ])
+        await callback.message.edit_text(f"Управление группой «{group.name}»:", reply_markup=keyboard)
+    await callback.answer()
