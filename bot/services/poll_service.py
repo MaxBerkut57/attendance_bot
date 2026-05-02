@@ -51,9 +51,9 @@ async def check_upcoming_lessons():
                 continue
 
             members = (await session.execute(
-                select(GroupMembership).where(
+                select(User).join(GroupMembership).where(
                     GroupMembership.group_id == group.id,
-                    GroupMembership.user_id.isnot(None)
+                    User.user_id.isnot(None)
                 )
             )).scalars().all()
 

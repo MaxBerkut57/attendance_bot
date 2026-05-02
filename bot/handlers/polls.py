@@ -43,10 +43,14 @@ async def handle_poll_answer(callback: types.CallbackQuery):
             return
         group_id = schedule.group_id
 
-        # Проверяем членство в группе
+        user = (await session.execute(select(User).where(User.user_id == user_id))).scalars().first()
+        if not user:
+            await callback.answer("Пользователь не найден.")
+            return
+
         membership = (await session.execute(
             select(GroupMembership).where(
-                GroupMembership.user_id == user_id,
+                GroupMembership.user_id == user.id,
                 GroupMembership.group_id == group_id
             )
         )).scalars().first()
