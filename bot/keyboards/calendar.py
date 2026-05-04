@@ -25,7 +25,8 @@ def generate_calendar(current_date: date, callback_prefix: str) -> InlineKeyboar
     today = date.today()
     nav = [
         InlineKeyboardButton(text="⬅️", callback_data=f"cal_shift:{callback_prefix}:{prev_week.isoformat()}"),
-        InlineKeyboardButton(text="Сегодня", callback_data=f"cal_shift:{callback_prefix}:{today.isoformat()}"),
+        # InlineKeyboardButton(text="Сегодня", callback_data=f"cal_shift:{callback_prefix}:{today.isoformat()}"),
+        InlineKeyboardButton(text="Сегодня", callback_data="admin_schedule_today"),
         InlineKeyboardButton(text="➡️", callback_data=f"cal_shift:{callback_prefix}:{next_week.isoformat()}")
     ]
     keyboard.append(nav)
