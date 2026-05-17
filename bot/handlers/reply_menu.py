@@ -12,6 +12,8 @@ from datetime import datetime
 from bot.handlers.schedule_upload import ScheduleUpload, cancel_kb
 from bot.handlers.reports import ReportState
 from sqlalchemy import delete
+from datetime import date
+from bot.keyboards.calendar import generate_calendar
 
 router = Router()
 
@@ -144,10 +146,8 @@ async def report_reply(message: types.Message, state: FSMContext):
         group = await get_starosta_group(session, message.from_user.id)
         if group:
             await state.update_data(group_id=group.id, report_type="general")
-            await message.answer(
-                "Введите дату или диапазон дат (ГГГГ-ММ-ДД [ГГГГ-ММ-ДД]):"
-            )
-            await state.set_state(ReportState.waiting_dates)
+            await message.answer("Выберите дату:", reply_markup=generate_calendar(date.today(), "report_date"))
+            await state.set_state(ReportState.waiting_date)
             return
 
         # 2. Если админ — выбор группы
