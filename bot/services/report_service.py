@@ -80,7 +80,8 @@ async def generate_group_report_for_date(group_id: int, sched_id: int) -> bytes:
 
         wb = Workbook()
         ws = wb.active
-        ws.title = f"{schedule.discipline}"
+        safe_title = schedule.discipline.replace("/", "_")
+        ws.title = safe_title
         ws.append(["ФИО", "Статус"])
         for cell in ws[1]:
             cell.fill = HEADER_FILL
